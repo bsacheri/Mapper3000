@@ -10,7 +10,7 @@
 <meta name="apple-mobile-web-app-title" content="Mapper3000">
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23E7DCC4' width='192' height='192'/><rect fill='%232A2117' x='48' y='48' width='96' height='96'/><circle fill='%23C8412C' cx='96' cy='96' r='30'/></svg>">
 <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23E7DCC4' width='192' height='192'/><rect fill='%232A2117' x='48' y='48' width='96' height='96'/><circle fill='%23C8412C' cx='96' cy='96' r='30'/></svg>">
-<link rel="manifest" href="/manifest.json">
+<link rel="manifest" href="manifest.json">
 <title>Mapper3000</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
@@ -4142,7 +4142,7 @@
   // ---------- Progressive Web App Support ----------
   // Register service worker for offline support and install prompts
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+    navigator.serviceWorker.register('sw.js', { scope: './' })
       .then(reg => {
         console.log('Service Worker registered successfully:', reg);
       })

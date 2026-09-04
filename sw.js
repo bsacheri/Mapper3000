@@ -1,9 +1,9 @@
 // Service Worker for Mapper3000 PWA
-const CACHE_NAME = 'garage-sale-run-v2';
+const CACHE_NAME = 'mapper3000-v1';
 const urlsToCache = [
-  '/',
-  '/garage-sale-map.html',
-  '/manifest.json',
+  './',
+  './garage-sale-map.html',
+  './manifest.json',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css',
   'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js',
   'https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js'
@@ -15,7 +15,7 @@ self.addEventListener('install', event => {
     caches.open(CACHE_NAME)
       .then(cache => {
         // Cache main file
-        return cache.add('/garage-sale-map.html').catch(err => {
+          return cache.add('./garage-sale-map.html').catch(err => {
           console.log('Could not cache garage-sale-map.html:', err);
         });
       })

@@ -2,8 +2,8 @@
   "name": "Mapper3000",
   "short_name": "Mapper3000",
   "description": "Build and optimize multi-stop routes with smart routing and GPS tracking",
-  "start_url": "/garage-sale-map.html",
-  "scope": "/",
+  "start_url": "./garage-sale-map.html",
+  "scope": "./",
   "display": "standalone",
   "background_color": "#ffffff",
   "theme_color": "#2A2117",
@@ -35,7 +35,7 @@
       "name": "View All Pins",
       "short_name": "All Pins",
       "description": "View all added route stops",
-      "url": "/garage-sale-map.html?tab=list",
+      "url": "./garage-sale-map.html?tab=list",
       "icons": [
         {
           "src": "data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 96 96'><rect fill='%233E7047' width='96' height='96'/><text x='48' y='48' text-anchor='middle' dominant-baseline='middle' font-size='48' fill='white'>📍</text></svg>",
