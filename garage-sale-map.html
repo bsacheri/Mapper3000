@@ -1,0 +1,4172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#2A2117">
+<meta name="description" content="Build and optimize multi-stop routes with smart routing and GPS tracking">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mapper3000">
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23E7DCC4' width='192' height='192'/><rect fill='%232A2117' x='48' y='48' width='96' height='96'/><circle fill='%23C8412C' cx='96' cy='96' r='30'/></svg>">
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'><rect fill='%23E7DCC4' width='192' height='192'/><rect fill='%232A2117' x='48' y='48' width='96' height='96'/><circle fill='%23C8412C' cx='96' cy='96' r='30'/></svg>">
+<link rel="manifest" href="/manifest.json">
+<title>Mapper3000</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/11.1.1/marked.min.js"></script>
+<style>
+  :root{
+    --kraft:#E7DCC4;
+    --kraft-dark:#D8C9A3;
+    --ink:#2A2117;
+    --sale-red:#C8412C;
+    --sale-red-dark:#9E3220;
+    --tag-green:#3E7047;
+    --tag-green-dark:#2E5636;
+    --tag-amber:#D4A574;
+    --paper:#FBF6EC;
+    --line:#c9b98f;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;font-family:'Segoe UI',Helvetica,Arial,sans-serif;background:var(--kraft);color:var(--ink);}
+  #app{display:flex;flex-direction:column;height:100vh;}
+
+  header{
+    background:var(--ink);
+    color:var(--paper);
+    padding:14px 18px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    flex-wrap:wrap;
+    gap:10px;
+    border-bottom:4px solid var(--sale-red);
+  }
+  header h1{
+    margin:0;
+    font-family:'Arial Black',Arial,sans-serif;
+    font-size:22px;
+    letter-spacing:0.5px;
+    text-transform:uppercase;
+    transform:rotate(-1deg);
+  }
+  header h1 span{color:var(--sale-red);}
+  .stats{display:flex;gap:14px;font-size:13px;align-items:center;flex-wrap:wrap;}
+  .stat{background:rgba(255,255,255,0.08);padding:6px 10px;border-radius:3px;}
+  .stat b{font-size:15px;display:block;}
+  button, .btn{
+    font-family:inherit;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.3px;
+    font-size:12px;
+    border:none;
+    border-radius:3px;
+    padding:9px 14px;
+    cursor:pointer;
+    transition:transform 0.08s ease, box-shadow 0.08s ease;
+  }
+  button:active{transform:translateY(1px);}
+  .btn-primary{background:var(--sale-red);color:var(--paper);}
+  .btn-primary:hover{background:var(--sale-red-dark);}
+  .btn-secondary{background:var(--tag-green);color:var(--paper);}
+  .btn-secondary:hover{background:var(--tag-green-dark);}
+  .btn-ghost{background:transparent;color:var(--paper);border:1px solid rgba(255,255,255,0.4);}
+  .btn-ghost:hover{background:rgba(255,255,255,0.12);}
+  button:disabled{opacity:0.45;cursor:not-allowed;}
+
+  #main{flex:1;display:flex;min-height:0;}
+  #panel{
+    width:320px;
+    background:var(--paper);
+    border-right:2px solid var(--line);
+    display:flex;
+    flex-direction:column;
+    overflow-y:auto;
+    flex-shrink:0;
+    transition:margin-left 0.18s ease;
+  }
+  #panel.collapsed{
+    margin-left:-320px;
+  }
+  /* Map + its floating controls live in their own positioned box, so
+     absolutely-positioned buttons always measure from the map's own
+     corner instead of #main's — correct whether the panel sits beside
+     the map (desktop) or above it (mobile column layout). */
+  #map-wrap{
+    flex:1;
+    min-height:0;
+    display:flex;
+    position:relative;
+  }
+
+  #version-stamp{
+    position:fixed;
+    bottom:8px;
+    left:8px;
+    z-index:1200;
+    background:rgba(42,33,23,0.82);
+    color:var(--paper);
+    font-size:10.5px;
+    padding:4px 8px;
+    border-radius:3px;
+    pointer-events:auto;
+    letter-spacing:0.3px;
+    cursor:pointer;
+    user-select:none;
+  }
+  #version-stamp:hover{
+    background:rgba(42,33,23,0.95);
+  }
+  #changelog-modal{
+    display:none;
+    position:fixed;
+    top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,0.7);
+    z-index:2000;
+    overflow:auto;
+    padding:20px;
+  }
+  #changelog-modal.visible{
+    display:block;
+  }
+  #changelog-content{
+    background:var(--paper);
+    color:var(--ink);
+    padding:20px;
+    border-radius:5px;
+    max-width:800px;
+    margin:20px auto;
+    font-family:inherit;
+    font-size:14px;
+    line-height:1.6;
+    word-wrap:break-word;
+  }
+  #changelog-content h1{font-size:20px;margin:20px 0 10px;font-weight:bold;border-bottom:2px solid var(--line);padding-bottom:8px;}
+  #changelog-content h2{font-size:16px;margin:18px 0 10px;font-weight:bold;color:var(--sale-red-dark);}
+  #changelog-content p{margin:8px 0;}
+  #changelog-content ul{margin:8px 0;padding-left:20px;}
+  #changelog-content li{margin:4px 0;}
+  #changelog-content strong{font-weight:bold;color:var(--sale-red-dark);}
+  #changelog-content em{font-style:italic;}
+  #changelog-content code{background:rgba(200,65,44,0.1);padding:2px 4px;border-radius:2px;font-family:'Courier New',monospace;font-size:13px;}
+  #changelog-close{
+    position:fixed;
+    top:10px;right:20px;
+    z-index:2001;
+    background:var(--sale-red);
+    color:var(--paper);
+    border:none;
+    padding:8px 14px;
+    border-radius:3px;
+    cursor:pointer;
+    font-weight:bold;
+  }
+  .header-title-wrap{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  #help-button,
+  #settings-button{
+    width:28px;
+    height:28px;
+    min-width:28px;
+    border-radius:50%;
+    background:var(--sale-red);
+    color:var(--paper);
+    border:2px solid rgba(255,255,255,0.75);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0;
+    font-size:18px;
+    font-weight:900;
+    line-height:1;
+    box-shadow:0 2px 8px rgba(0,0,0,0.2);
+  }
+  #help-button:hover,
+  #settings-button:hover{
+    background:var(--sale-red-dark);
+  }
+  #settings-button{font-size:16px;}
+  #help-modal-overlay,
+  #help-modal-overlay.visible,
+  #settings-modal-overlay,
+  #settings-modal-overlay.visible{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    z-index:2200;
+  }
+  #help-modal-overlay.visible,
+  #settings-modal-overlay.visible{
+    display:block;
+  }
+  #help-modal,
+  #settings-modal{
+    display:none;
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform:translate(-50%, -50%);
+    width:min(760px, calc(100vw - 24px));
+    max-height:80vh;
+    overflow:auto;
+    background:var(--paper);
+    color:var(--ink);
+    border:3px solid var(--sale-red);
+    border-radius:8px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.28);
+    z-index:2201;
+    padding:18px 20px 20px;
+  }
+  #help-modal.visible,
+  #settings-modal.visible{
+    display:block;
+  }
+  #help-modal-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    gap:12px;
+    margin-bottom:12px;
+    padding-bottom:12px;
+    border-bottom:2px solid var(--line);
+  }
+  #help-modal-header h2{
+    margin:0;
+    color:var(--sale-red-dark);
+    font-size:20px;
+  }
+  #help-modal-close,
+  #settings-modal-close{
+    background:var(--line);
+    color:var(--ink);
+    padding:7px 12px;
+    font-size:12px;
+    border-radius:3px;
+  }
+  #help-modal-content{
+    display:grid;
+    gap:18px;
+  }
+  .help-section{
+    background:#f7f1e5;
+    border:1px solid var(--line);
+    border-radius:6px;
+    padding:12px 14px;
+  }
+  .help-section h3{
+    margin:0 0 8px;
+    font-size:15px;
+    color:var(--ink);
+  }
+  .help-section ul{
+    margin:0;
+    padding-left:18px;
+    line-height:1.6;
+    font-size:13px;
+  }
+  .help-section li + li{margin-top:4px;}
+  #settings-modal .settings-option{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin:8px 0 0;
+    font-size:13px;
+    line-height:1.5;
+  }
+  #settings-modal .settings-option input{
+    width:16px;
+    height:16px;
+    accent-color:var(--sale-red);
+    margin:0;
+  }
+  #settings-modal .ors-key-row{
+    display:flex;
+    gap:6px;
+    align-items:center;
+  }
+  #settings-modal .ors-key-row input{
+    flex:1;
+    padding:9px 10px;
+    border:1px solid var(--line);
+    border-radius:4px;
+    font-size:13px;
+    font-family:monospace;
+    background:#fff;
+  }
+  #saved-lists-modal-overlay{
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.6);
+    z-index:2200;
+  }
+  #saved-lists-modal-overlay.visible{display:block;}
+  #saved-lists-modal{
+    display:none;
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform:translate(-50%, -50%);
+    width:min(520px, calc(100vw - 24px));
+    max-height:80vh;
+    overflow:auto;
+    background:var(--paper);
+    color:var(--ink);
+    border:3px solid var(--sale-red);
+    border-radius:8px;
+    box-shadow:0 12px 32px rgba(0,0,0,0.28);
+    z-index:2201;
+    padding:18px 20px 20px;
+  }
+  #saved-lists-modal.visible{display:block;}
+  #saved-lists-form{display:flex;gap:8px;margin-bottom:14px;}
+  #saved-list-name{flex:1;min-width:0;padding:10px;border:1px solid var(--line);border-radius:4px;font-size:14px;}
+  #saved-lists-empty{color:#6b6152;font-size:13px;margin:4px 0;}
+  .saved-list-row{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px dashed var(--line);}
+  .saved-list-details{flex:1;min-width:0;}
+  .saved-list-name{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .saved-list-meta{font-size:11px;color:#6b6152;margin-top:2px;}
+  .saved-list-row button{padding:9px 10px;font-size:12px;white-space:nowrap;}
+  .saved-list-row .icon-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:36px;
+    height:36px;
+    flex-shrink:0;
+    padding:0;
+    border:none;
+    border-radius:4px;
+    cursor:pointer;
+    background:#999;
+  }
+  .saved-list-row .icon-btn:hover{background:var(--sale-red-dark);}
+  .saved-list-row .icon-btn svg{
+    width:17px;height:17px;
+    stroke:#fff;fill:none;stroke-width:2;
+    stroke-linecap:round;stroke-linejoin:round;
+  }
+  #selection-modal{
+    display:none;
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    background:var(--paper);
+    border:3px solid var(--sale-red);
+    border-radius:5px;
+    padding:20px;
+    z-index:2100;
+    text-align:center;
+    box-shadow:0 4px 20px rgba(0,0,0,0.3);
+    min-width:300px;
+  }
+  #selection-modal.visible{
+    display:block;
+  }
+  #selection-modal h2{
+    margin:0 0 15px;
+    font-size:16px;
+    color:var(--sale-red-dark);
+  }
+  #selection-modal p{
+    margin:0 0 20px;
+    font-size:14px;
+    color:var(--ink);
+  }
+  #selection-modal .modal-buttons{
+    display:flex;
+    gap:10px;
+    justify-content:center;
+  }
+  #selection-modal button{
+    padding:10px 20px;
+    font-size:13px;
+    font-weight:bold;
+    border:none;
+    border-radius:3px;
+    cursor:pointer;
+    text-transform:uppercase;
+  }
+  #btn-mark-visited{
+    background:var(--tag-green);
+    color:var(--paper);
+  }
+  #btn-mark-visited:hover{
+    background:var(--tag-green-dark);
+  }
+  #btn-mark-unvisited{
+    background:var(--sale-red);
+    color:var(--paper);
+  }
+  #btn-mark-unvisited:hover{
+    background:var(--sale-red-dark);
+  }
+  #selection-modal-overlay{
+    display:none;
+    position:fixed;
+    top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,0.5);
+    z-index:2050;
+  }
+  #selection-modal-overlay.visible{
+    display:block;
+  }
+  #confirm-modal, #add-pin-modal, #edit-pin-modal{
+    display:none;
+    position:fixed;
+    top:50%;
+    left:50%;
+    transform:translate(-50%,-50%);
+    background:var(--paper);
+    border:3px solid var(--sale-red);
+    border-radius:5px;
+    padding:20px;
+    /* Above the help/settings/saved-lists modals (2200-2201) so a confirmation
+       raised from inside one of them is actually visible. */
+    z-index:2300;
+    text-align:center;
+    box-shadow:0 4px 20px rgba(0,0,0,0.3);
+    min-width:300px;
+  }
+  #confirm-modal.visible, #add-pin-modal.visible, #edit-pin-modal.visible{
+    display:block;
+  }
+  #confirm-modal h2, #add-pin-modal h2, #edit-pin-modal h2{
+    margin:0 0 15px;
+    font-size:16px;
+    color:var(--sale-red-dark);
+  }
+  #confirm-modal p, #add-pin-modal p{
+    margin:0 0 20px;
+    font-size:14px;
+    color:var(--ink);
+  }
+  #add-pin-modal input, #edit-pin-modal input{
+    width:100%;
+    padding:9px 10px;
+    font-size:13px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    margin-bottom:16px;
+    font-family:inherit;
+    background:#fff;
+    color:var(--ink);
+  }
+  #confirm-modal .modal-buttons, #add-pin-modal .modal-buttons, #edit-pin-modal .modal-buttons{
+    display:flex;
+    gap:10px;
+    justify-content:center;
+  }
+  #confirm-modal button, #add-pin-modal button, #edit-pin-modal button{
+    padding:10px 20px;
+    font-size:13px;
+    font-weight:bold;
+    border:none;
+    border-radius:3px;
+    cursor:pointer;
+    text-transform:uppercase;
+  }
+  #btn-confirm-yes{
+    background:var(--sale-red);
+    color:var(--paper);
+  }
+  #btn-confirm-yes:hover{
+    background:var(--sale-red-dark);
+  }
+  #btn-confirm-no{
+    background:var(--line);
+    color:var(--ink);
+  }
+  #btn-confirm-no:hover{
+    background:#b8a888;
+  }
+  #confirm-modal-overlay, #add-pin-modal-overlay, #edit-pin-modal-overlay{
+    display:none;
+    position:fixed;
+    top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,0.5);
+    z-index:2250;
+  }
+  #confirm-modal-overlay.visible, #add-pin-modal-overlay.visible, #edit-pin-modal-overlay.visible{
+    display:block;
+  }
+  #map-toolbar{
+    position:absolute;
+    top:60px;
+    right:10px;
+    z-index:1000;
+    display:flex;
+    flex-direction:column;
+    gap:8px;
+  }
+  .map-toolbar-btn{
+    background:var(--ink);
+    color:var(--paper);
+    border:none;
+    border-radius:3px;
+    padding:8px 12px;
+    cursor:pointer;
+    font-size:12px;
+    font-weight:bold;
+    box-shadow:0 2px 6px rgba(0,0,0,0.3);
+  }
+  .map-toolbar-btn:hover{
+    background:#1a1510;
+  }
+  .map-toolbar-btn.active{
+    background:var(--sale-red);
+  }
+  #layer-menu{
+    position:absolute;
+    top:48px;
+    right:0;
+    width:170px;
+    background:rgba(250,248,244,0.96);
+    border:1px solid var(--line);
+    border-radius:6px;
+    box-shadow:0 6px 18px rgba(0,0,0,0.18);
+    padding:8px;
+    display:none;
+    z-index:1001;
+  }
+  #layer-menu.visible{display:block;}
+  .layer-option{
+    display:block;
+    width:100%;
+    padding:8px 10px;
+    text-align:left;
+    border:none;
+    border-radius:4px;
+    background:transparent;
+    color:var(--ink);
+    font-size:12px;
+    font-weight:700;
+    cursor:pointer;
+    margin-bottom:4px;
+  }
+  .layer-option:hover{background:var(--kraft-dark);}
+  .layer-option.active{background:var(--sale-red);color:var(--paper);}
+  #tab-bar{
+    display:flex;
+    border-bottom:2px solid var(--line);
+    background:var(--kraft-dark);
+    flex-shrink:0;
+  }
+  .tab-btn{
+    flex:1;
+    background:transparent;
+    border:none;
+    border-radius:0;
+    padding:12px 8px;
+    font-size:11.5px;
+    font-weight:700;
+    text-transform:uppercase;
+    letter-spacing:0.4px;
+    color:#6b6152;
+    cursor:pointer;
+    border-bottom:3px solid transparent;
+  }
+  .tab-btn.active{
+    color:var(--sale-red-dark);
+    background:var(--paper);
+    border-bottom:3px solid var(--sale-red);
+  }
+  .tab-panel{display:none;}
+  .tab-panel.active{display:block;}
+  .section{padding:14px 16px;border-bottom:1px solid var(--line);}
+  .section h2{
+    margin:0 0 8px;
+    font-size:12px;
+    text-transform:uppercase;
+    letter-spacing:1px;
+    color:var(--sale-red-dark);
+  }
+  textarea{
+    width:100%;
+    min-height:90px;
+    font-family:'Courier New',monospace;
+    font-size:12.5px;
+    padding:8px;
+    border:1px solid var(--line);
+    border-radius:3px;
+    resize:vertical;
+    background:#fff;
+  }
+  .hint{font-size:11px;color:#6b6152;margin:6px 0 10px;line-height:1.4;}
+  #danger-zone{border-top:2px solid var(--sale-red);}
+  #danger-zone h2{color:var(--sale-red-dark);}
+  #btn-reset{background:var(--sale-red);color:var(--paper);width:100%;}
+  #btn-reset:hover{background:var(--sale-red-dark);}
+  .row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap;}
+  #progress-wrap{margin-top:8px;display:none;}
+  #progress-bar{height:6px;background:var(--kraft-dark);border-radius:3px;overflow:hidden;}
+  #progress-fill{height:100%;width:0%;background:var(--sale-red);transition:width 0.2s;}
+  #progress-label{font-size:11px;color:#6b6152;margin-top:4px;}
+  #failed-list{font-size:11px;color:var(--sale-red-dark);margin-top:8px;}
+
+  #route-list{list-style:none;margin:8px 0 0;padding:0;font-size:13px;}
+  #route-list li{
+    padding:8px 0;
+    border-bottom:1px dashed var(--line);
+    display:flex;
+    justify-content:space-between;
+    gap:8px;
+    cursor:pointer;
+  }
+  #route-list li:hover{
+    background:var(--kraft-dark);
+    margin:0 -8px;
+    padding:8px 8px;
+    border-radius:2px;
+  }
+  #route-list li:last-child{border-bottom:none;}
+  #route-list .addr{flex:1;}
+  #route-list .dist{color:#6b6152;white-space:nowrap;font-size:11.5px;}
+  /* Drag-to-reorder, only rendered in Manual order mode. touch-action:none
+     stops the browser scrolling the panel while you drag a row on a phone. */
+  #route-list .drag-handle{
+    flex-shrink:0;
+    width:22px;
+    cursor:grab;
+    color:#a99c80;
+    font-size:15px;
+    line-height:1;
+    text-align:center;
+    touch-action:none;
+    user-select:none;
+    -webkit-tap-highlight-color:transparent;
+  }
+  #route-list .drag-handle:active{cursor:grabbing;}
+  #route-list li.dragging{
+    opacity:0.5;
+    background:var(--kraft-dark);
+    border-radius:2px;
+  }
+  #route-list li.drag-target{
+    border-top:2px solid var(--sale-red);
+  }
+  #route-empty{font-size:12px;color:#8a7e6a;font-style:italic;}
+
+  .addr-list-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:8px 4px;
+    border-bottom:1px dashed var(--line);
+    cursor:pointer;
+  }
+  .addr-list-row:hover{background:var(--kraft);}
+  .addr-list-row .dot{
+    width:10px;height:10px;border-radius:50%;flex-shrink:0;
+    border:1.5px solid var(--ink);
+  }
+  .addr-list-row .txt{flex:1;line-height:1.3;}
+  .addr-list-row.selected{background:var(--kraft-dark);}
+
+  #map{flex:1;}
+
+  .leaflet-popup-content{font-size:13px;max-width:230px;}
+  .popup-addr{font-weight:700;margin-bottom:8px;}
+  .popup-btn{
+    font-size:11px;
+    padding:5px 8px;
+    border-radius:3px;
+    border:none;
+    cursor:pointer;
+    text-transform:uppercase;
+    font-weight:700;
+  }
+  .popup-icon-row{display:flex;gap:8px;justify-content:center;}
+  .popup-icon-btn{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    width:38px;
+    height:38px;
+    flex-shrink:0;
+    border:none;
+    border-radius:50%;
+    cursor:pointer;
+    padding:0;
+  }
+  .popup-icon-btn svg{width:19px;height:19px;stroke:#fff;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;}
+
+  .location-heading{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .location-heading-dot{
+    display:inline-block;
+    width:12px;
+    height:12px;
+    border-radius:50%;
+    background:#2E86FF;
+    border:2px solid #2A2117;
+    box-shadow:0 0 0 1px rgba(42,33,23,0.15);
+    flex-shrink:0;
+  }
+
+  #geo-status{font-size:11px;color:#8a7e6a;margin-top:6px;}
+
+  #file-warning{
+    display:none;
+    background:#F4B400;
+    color:var(--ink);
+    padding:10px 16px;
+    font-size:12.5px;
+    line-height:1.5;
+    border-bottom:3px solid var(--sale-red);
+  }
+  #file-warning code{background:rgba(0,0,0,0.08);padding:1px 5px;border-radius:3px;}
+  #file-warning b{display:block;margin-bottom:3px;}
+
+  #panel-resizer{display:none;}
+
+  /* Touch-friendly sizing that applies regardless of orientation — bigger
+     tap targets and modals that don't overflow a narrower screen. */
+  @media (max-width:1024px){
+    .map-toolbar-btn{padding:11px 14px;font-size:13px;}
+    #version-stamp{padding-bottom:calc(4px + env(safe-area-inset-bottom));}
+    #selection-modal, #confirm-modal, #add-pin-modal, #edit-pin-modal, #saved-lists-modal{width:88vw;min-width:0;padding:16px;}
+    #selection-modal .modal-buttons, #confirm-modal .modal-buttons, #add-pin-modal .modal-buttons, #edit-pin-modal .modal-buttons{flex-wrap:wrap;}
+    #selection-modal button, #confirm-modal button, #add-pin-modal button, #edit-pin-modal button{flex:1 1 45%;padding:12px 10px;}
+    #saved-lists-form{flex-direction:column;}
+    #saved-lists-form button{min-height:44px;}
+    .saved-list-row{align-items:stretch;flex-wrap:wrap;}
+    .saved-list-details{flex-basis:100%;}
+    .saved-list-row button{flex:1;min-height:44px;}
+  }
+
+  /* Panel-above-map stacking only for portrait phones/tablets. Landscape at
+     this width range has plenty of horizontal room, so it keeps the normal
+     side-by-side desktop layout (handled by the default, un-mediaed rules)
+     instead of squeezing the map into a short strip under the panel. */
+  @media (max-width:1024px) and (orientation:portrait){
+    #main{flex-direction:column;}
+    #panel{
+      width:100%;
+      /* Smaller default than before so the map starts out with the larger
+         share of the screen; the drag handle still lets you rebalance it. */
+      max-height:34vh;
+      border-right:none;
+      border-bottom:none;
+      /* Column layout means margin-left can't reclaim vertical space —
+         collapse by height here instead, so the map actually gets the
+         freed-up room instead of a blank gap. */
+      margin-left:0;
+      transition:max-height 0.18s ease;
+    }
+    #panel.collapsed{
+      margin-left:0;
+      /* !important beats the inline max-height the resizer sets while
+         dragging — otherwise a custom height would block the collapse. */
+      max-height:0 !important;
+      overflow:hidden;
+    }
+    #panel.collapsed + #panel-resizer{
+      display:none;
+    }
+    /* Drag handle between the panel and the map — lets you pick how much
+       vertical room each gets, since a fixed split is too tall on some
+       phones and too short on tablets. */
+    #panel-resizer{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      height:20px;
+      flex-shrink:0;
+      background:var(--kraft-dark);
+      border-bottom:2px solid var(--line);
+      cursor:row-resize;
+      touch-action:none;
+      -webkit-tap-highlight-color:transparent;
+    }
+    #panel-resizer::before{
+      content:'';
+      width:44px;
+      height:5px;
+      border-radius:3px;
+      background:var(--line);
+    }
+  }
+
+  /* Phone-width-only tightening. Tablets (up to 1024px, handled above) have
+     plenty of room for the normal header — shrinking it there just made the
+     app look stuck in "mobile mode" even on a full-size tablet screen. */
+  @media (max-width:600px){
+    /* Keep the stats/buttons row from wrapping internally — a longer
+       button label (e.g. "Show panel" vs "Hide panel") would otherwise
+       push a stat pill onto a second line and make the header taller. */
+    header{padding:10px 12px;gap:6px;}
+    header h1{font-size:17px;}
+    .stats{gap:6px;flex-wrap:nowrap;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+    .stat{padding:4px 7px;flex-shrink:0;}
+    .stat b{font-size:13px;}
+    #btn-toggle-panel{flex-shrink:0;min-width:88px;padding:7px 9px;font-size:10.5px;}
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="version-stamp">v1.27 &middot; 2026-09-03</div>
+  <div id="changelog-modal">
+    <button id="changelog-close">Close</button>
+    <div id="changelog-content"></div>
+  </div>
+  <div id="help-modal-overlay"></div>
+  <div id="help-modal" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
+    <div id="help-modal-header">
+      <h2 id="help-modal-title">How to use Mapper3000</h2>
+      <button id="help-modal-close" type="button">Close</button>
+    </div>
+    <div id="help-modal-content">
+      <section class="help-section">
+        <h3>Ride tab</h3>
+        <ul>
+          <li>Use the <strong>Ride</strong> tab to set your location before planning a route.</li>
+          <li>Tap <strong>Track my location (GPS)</strong> to let the app follow your position, or choose <strong>Set location by tapping map</strong> if GPS is unavailable.</li>
+          <li>Pick how many stops to visit and choose a routing style, then tap <strong>Find nearest … &amp; route</strong>.</li>
+          <li>The app draws a route and shows the best nearby stops from your current location.</li>
+        </ul>
+      </section>
+      <section class="help-section">
+        <h3>All addresses tab</h3>
+        <ul>
+          <li>View every pin you have added, sorted by order added or alphabetically.</li>
+          <li>Use <strong>All</strong>, <strong>Visited</strong>, or <strong>Not visited</strong> filters to focus on certain stops.</li>
+          <li>Tap any address row to zoom to that location and open its popup on the map.</li>
+          <li>Mark addresses visited or unvisited from the map popup or selection tools.</li>
+        </ul>
+      </section>
+      <section class="help-section">
+        <h3>Add addresses tab</h3>
+        <ul>
+          <li>Paste one address per line, then tap <strong>Add &amp; plot pins</strong>.</li>
+          <li>The app tries several geocoders to place each address on the map automatically.</li>
+          <li>If a location cannot be found, it stays in the failed list so you can place it manually on the map.</li>
+          <li>Use <strong>Reset all</strong> only if you want to clear every saved address and visited state.</li>
+        </ul>
+      </section>
+      <section class="help-section">
+        <h3>Map buttons and map interactions</h3>
+        <ul>
+          <li><strong>Fit all pins</strong> zooms the map to show every stop saved on the device.</li>
+          <li><strong>Select box</strong> lets you drag a rectangle across the map and select multiple pins at once.</li>
+          <li><strong>My location</strong> centers the map on your current tracked GPS position when it is available.</li>
+          <li>Click a pin to open a popup: mark it visited, edit it, or remove it.</li>
+          <li>Drag the map to explore the area, and scroll or pinch to zoom in and out.</li>
+          <li>Use the sidebar button to hide or show the panel when you want more map space.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+  <div id="settings-modal-overlay"></div>
+  <div id="settings-modal" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div id="help-modal-header">
+      <h2 id="settings-modal-title">Settings</h2>
+      <button id="settings-modal-close" type="button">Close</button>
+    </div>
+    <div id="help-modal-content">
+      <section class="help-section">
+        <h3>Navigation</h3>
+        <label for="travel-mode-select" style="display:block;margin-bottom:8px;font-size:13px;font-weight:700;">Transportation method for Google Maps</label>
+        <select id="travel-mode-select" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;font-size:13px;">
+          <option value="bicycling">Bicycling</option>
+          <option value="driving">Driving</option>
+          <option value="walking">Walking</option>
+          <option value="transit">Transit</option>
+        </select>
+        <p style="margin:10px 0 0 0;font-size:12px;line-height:1.4;color:#4a4a4a;">
+          Use <strong>Bicycling</strong> for local stops and garage-sale runs, <strong>Walking</strong> for short on-foot errands, and <strong>Driving</strong> or <strong>Transit</strong> when that matches your trip.
+        </p>
+
+        <div style="margin-top:14px;">
+          <label class="settings-option"><input id="avoid-highways" type="checkbox"> Avoid highways</label>
+          <label class="settings-option"><input id="avoid-tolls" type="checkbox"> Avoid toll roads</label>
+          <label class="settings-option"><input id="avoid-ferries" type="checkbox"> Avoid ferries</label>
+        </div>
+      </section>
+      <section class="help-section">
+        <h3>Road Distances</h3>
+        <label for="routing-provider-select" style="display:block;font-size:13px;font-weight:700;margin-bottom:6px;">Service</label>
+        <select id="routing-provider-select" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;font-size:13px;">
+          <option value="none">None — straight-line distance</option>
+          <option value="ors">OpenRouteService</option>
+          <option value="mapquest">MapQuest</option>
+        </select>
+        <p style="margin:6px 0 0;font-size:11px;line-height:1.4;color:#4a4a4a;">Both are free with an API key. If one is out of quota, switch to the other from this menu without losing anything.</p>
+
+        <div id="ors-sub-settings" style="display:none;margin-top:12px;">
+          <label for="ors-api-key" style="display:block;font-size:13px;font-weight:700;margin-bottom:6px;">OpenRouteService API Key</label>
+          <div class="ors-key-row">
+            <input id="ors-api-key" type="password" placeholder="Paste your ORS key here" autocomplete="off" spellcheck="false">
+            <button type="button" id="ors-key-toggle" class="btn-ghost" style="white-space:nowrap;color:var(--ink);border-color:var(--line);">Show</button>
+          </div>
+          <p style="margin:6px 0 0;font-size:11px;line-height:1.4;color:#4a4a4a;">Free at <a href="https://openrouteservice.org/dev/#/signup" target="_blank" rel="noopener" style="color:var(--sale-red-dark);">openrouteservice.org</a>. Resets daily. Stored only in this browser.</p>
+          <label for="ors-profile-select" style="display:block;font-size:13px;font-weight:700;margin-top:12px;margin-bottom:4px;">Routing profile</label>
+          <select id="ors-profile-select" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;font-size:13px;">
+            <option value="cycling-regular">Cycling — regular (recommended)</option>
+            <option value="cycling-electric">Cycling — e-bike</option>
+            <option value="cycling-road">Cycling — road bike</option>
+            <option value="cycling-mountain">Cycling — mountain bike</option>
+            <option value="foot-walking">Walking</option>
+            <option value="driving-car">Driving (car)</option>
+          </select>
+          <p style="margin:6px 0 0;font-size:11px;line-height:1.5;color:#4a4a4a;">
+            <strong>Regular</strong> is the only profile that reliably uses rail-trails and greenways — it happily rides crushed limestone and gravel paths.
+            <strong>Road bike</strong> sticks to pavement and will route around unpaved trails.
+            <strong>Mountain bike</strong> is tuned for rough off-road terrain, not smooth trails, so it often prefers streets.
+          </p>
+        </div>
+
+        <div id="mapquest-sub-settings" style="display:none;margin-top:12px;">
+          <label for="mapquest-api-key" style="display:block;font-size:13px;font-weight:700;margin-bottom:6px;">MapQuest API Key</label>
+          <div class="ors-key-row">
+            <input id="mapquest-api-key" type="password" placeholder="Paste your MapQuest key here" autocomplete="off" spellcheck="false">
+            <button type="button" id="mapquest-key-toggle" class="btn-ghost" style="white-space:nowrap;color:var(--ink);border-color:var(--line);">Show</button>
+          </div>
+          <p style="margin:6px 0 0;font-size:11px;line-height:1.4;color:#4a4a4a;">Free at <a href="https://developer.mapquest.com/plans" target="_blank" rel="noopener" style="color:var(--sale-red-dark);">developer.mapquest.com</a> — a one-time free allotment of transactions rather than a daily reset. Stored only in this browser.</p>
+          <label for="mapquest-route-type-select" style="display:block;font-size:13px;font-weight:700;margin-top:12px;margin-bottom:4px;">Route type</label>
+          <select id="mapquest-route-type-select" style="width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:4px;background:#fff;font-size:13px;">
+            <option value="bicycle">Bicycle</option>
+            <option value="pedestrian">Walking</option>
+            <option value="fastest">Driving — fastest</option>
+            <option value="shortest">Driving — shortest</option>
+          </select>
+          <p style="margin:6px 0 0;font-size:11px;line-height:1.5;color:#4a4a4a;">
+            MapQuest has one general-purpose <strong>Bicycle</strong> mode rather than ORS's separate road/mountain/e-bike profiles.
+          </p>
+        </div>
+
+        <div id="road-geometry-wrap" style="display:none;margin-top:12px;">
+          <label class="settings-option">
+            <input id="road-geometry" type="checkbox">
+            Draw actual road paths on map <span style="color:#6b6152;">(uses one extra API call)</span>
+          </label>
+        </div>
+      </section>
+      <section class="help-section">
+        <h3>Good future additions</h3>
+        <ul>
+          <li><strong>Travel time estimates.</strong> ORS already returns duration alongside distance — show estimated minutes per leg in the route list so you can plan around opening hours.</li>
+          <li><strong>Stop tags.</strong> Label each pin with what's being sold (furniture, clothes, tools, electronics) and filter the map or route by tag.</li>
+          <li><strong>Opening hours per stop.</strong> Add a time window to each address; flag stops you might arrive at too early or too late based on your current pace.</li>
+          <li><strong>"Skip for now" status.</strong> A third pin state (yellow) to defer a stop without marking it visited — useful when a sale doesn't look worth it but you might circle back.</li>
+          <li><strong>Route export.</strong> Copy the ordered stop list to clipboard or download it as plain text so you can hand it to a riding partner or print it.</li>
+          <li><strong>Shareable route link.</strong> Encode the current stop list in a URL so you can text it to someone riding with you and they open the same route instantly.</li>
+          <li><strong>Neighborhood radius filter.</strong> Draw a circle around your starting point and only route stops within X miles, so the planner ignores pins that are too far out before it even starts.</li>
+          <li><strong>Verified bike-map provider.</strong> Add a dedicated bicycle basemap only after confirming its tile URL, usage policy, and reliability across the areas where you ride.</li>
+        </ul>
+      </section>
+    </div>
+  </div>
+  <div id="saved-lists-modal-overlay"></div>
+  <div id="saved-lists-modal" role="dialog" aria-modal="true" aria-labelledby="saved-lists-modal-title">
+    <div id="help-modal-header">
+      <h2 id="saved-lists-modal-title">Saved address lists</h2>
+      <button id="saved-lists-modal-close" type="button">Close</button>
+    </div>
+    <form id="saved-lists-form">
+      <input id="saved-list-name" type="text" maxlength="60" placeholder="Name this list" aria-label="Name this address list">
+      <button class="btn-primary" type="submit">Save current list</button>
+    </form>
+    <button class="btn-secondary" id="btn-copy-addresses" type="button" style="width:100%;margin-bottom:8px;">Copy current addresses</button>
+    <div id="copy-addresses-status" aria-live="polite" style="min-height:18px;margin-bottom:8px;font-size:12px;color:#6b6152;"></div>
+    <div id="saved-lists-empty">No saved lists yet.</div>
+    <div id="saved-lists"></div>
+  </div>
+  <div id="selection-modal-overlay"></div>
+  <div id="selection-modal">
+    <h2>Pins Selected</h2>
+    <p id="selection-count"></p>
+    <div class="modal-buttons">
+      <button id="btn-mark-visited">Mark as visited</button>
+      <button id="btn-mark-unvisited">Mark as NOT visited</button>
+      <button id="btn-remove-selected" style="background:#999;color:var(--paper);">Remove</button>
+      <button id="btn-selection-cancel" style="background:var(--line);color:var(--ink);">Cancel</button>
+    </div>
+  </div>
+  <div id="confirm-modal-overlay"></div>
+  <div id="confirm-modal">
+    <h2>Confirm Action</h2>
+    <p id="confirm-message"></p>
+    <div class="modal-buttons">
+      <button id="btn-confirm-yes">Yes, Remove</button>
+      <button id="btn-confirm-no">Cancel</button>
+    </div>
+  </div>
+  <div id="add-pin-modal-overlay"></div>
+  <div id="add-pin-modal">
+    <h2>Add a Pin</h2>
+    <p>Drop a pin here and give it a description (like a name or what's for sale).</p>
+    <input type="text" id="add-pin-input" placeholder="e.g. Smith family — furniture &amp; kids' clothes" maxlength="200">
+    <div class="modal-buttons">
+      <button id="btn-add-pin-confirm" style="background:var(--tag-green);color:var(--paper);">Add pin</button>
+      <button id="btn-add-pin-cancel" style="background:var(--line);color:var(--ink);">Cancel</button>
+    </div>
+  </div>
+  <div id="edit-pin-modal-overlay"></div>
+  <div id="edit-pin-modal">
+    <h2>Edit Address</h2>
+    <input type="text" id="edit-pin-input" placeholder="Edit address or description" maxlength="200">
+    <p style="margin:0 0 14px;font-size:11.5px;line-height:1.45;color:#6b6152;text-align:left;">
+      <strong>Save as copy</strong> makes a second pin at this same spot — useful when you
+      pass a place twice in one trip (drop off, then pick up). Give the copy its own label
+      first, then switch the routing algorithm to <strong>Manual order</strong> to place it
+      where you want; the optimizers will always bunch identical stops together.
+    </p>
+    <div class="modal-buttons">
+      <button id="btn-edit-pin-confirm" style="background:var(--sale-red);color:var(--paper);">Save</button>
+      <button id="btn-edit-pin-copy" style="background:var(--tag-green);color:var(--paper);">Save as copy</button>
+      <button id="btn-edit-pin-cancel" style="background:var(--line);color:var(--ink);">Cancel</button>
+    </div>
+  </div>
+  <div id="file-warning">
+    <b>Heads up: this page can't reach the internet from here.</b>
+    You opened this file directly from your computer (a <code>file://</code> address), which browsers block from fetching maps or geocoding addresses, and from saving your progress. Easiest fix: keep using it inside the Claude chat window instead of downloading it. If you want an offline copy on your own machine, open a terminal in this file's folder and run <code>python -m http.server 8000</code>, then visit <code>http://localhost:8000/garage-sale-map.html</code> in your browser — that gives it a real address the browser will trust.
+  </div>
+  <header>
+    <div class="header-title-wrap">
+      <h1>Mapper<span>3000</span></h1>
+      <button id="settings-button" type="button" aria-label="Open settings" title="Settings">⚙</button>
+      <button id="help-button" type="button" aria-label="Open help instructions" title="Show help">?</button>
+    </div>
+    <div class="stats">
+      <div class="stat"><b id="stat-total">0</b>total</div>
+      <div class="stat"><b id="stat-visited">0</b>visited</div>
+      <div class="stat"><b id="stat-remaining">0</b>remaining</div>
+      <button class="btn-ghost" id="btn-toggle-panel" title="Hide the sidebar to see more map">Hide panel</button>
+    </div>
+  </header>
+
+  <div id="main">
+    <div id="panel">
+      <div id="tab-bar">
+        <button class="tab-btn active" id="tab-btn-route" data-tab="tab-route">Ride</button>
+        <button class="tab-btn" id="tab-btn-list" data-tab="tab-list">All addresses</button>
+        <button class="tab-btn" id="tab-btn-add" data-tab="tab-add">Add addresses</button>
+      </div>
+
+      <div class="tab-panel active" id="tab-route">
+      <div class="section">
+        <h2 class="location-heading">Your location <span class="location-heading-dot" aria-label="Current location"></span></h2>
+        <button class="btn-secondary" id="btn-locate">Track my location (GPS)</button>
+        <div id="geo-status">Not tracking yet.</div>
+        <div class="hint" style="margin-top:10px;">GPS often can't be used in a test environment. If tracking fails, just tap the map where you're standing instead:</div>
+        <button class="btn-primary" id="btn-manual-location">Set location by tapping map</button>
+      </div>
+
+      <div class="section">
+        <h2>Nearest unvisited stops<span id="route-summary" style="display:none;text-transform:none;letter-spacing:0;color:var(--ink);font-weight:400;"></span></h2>
+        <label for="stops-select" style="font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:#6b6152;display:block;margin-bottom:4px;">Number of stops</label>
+        <select id="stops-select" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:3px;font-size:12.5px;margin-bottom:10px;background:#fff;">
+          <option value="5" selected>5</option>
+          <option value="10">10</option>
+          <option value="15">15</option>
+          <option value="20">20</option>
+          <option value="30">30</option>
+          <option value="40">40</option>
+          <option value="49">49</option>
+        </select>
+        <label for="algo-select" style="font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:#6b6152;display:block;margin-bottom:4px;">Routing algorithm</label>
+        <select id="algo-select" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:3px;font-size:12.5px;margin-bottom:10px;background:#fff;">
+          <option value="nearest">Nearest-neighbor (fast, default)</option>
+          <option value="optimal">Optimal order (best possible)</option>
+          <option value="twoopt">Nearest-neighbor + 2-opt cleanup</option>
+          <option value="manual">Manual order (drag to arrange)</option>
+        </select>
+        <div id="ride-profile-wrap" style="display:none;">
+          <label for="ride-profile-select" style="font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:#6b6152;display:block;margin-bottom:4px;">Travel mode</label>
+          <select id="ride-profile-select" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:3px;font-size:12.5px;margin-bottom:4px;background:#fff;">
+            <option value="cycling-regular">Regular bike — uses trails &amp; gravel</option>
+            <option value="cycling-electric">E-bike</option>
+            <option value="cycling-road">Road bike — paved only</option>
+            <option value="cycling-mountain">Mountain bike — off-road</option>
+            <option value="foot-walking">Walking</option>
+            <option value="driving-car">Driving (car)</option>
+          </select>
+          <div class="hint" id="ride-profile-hint" style="margin-top:0;margin-bottom:10px;">Happily rides rail-trails, greenways, and crushed-limestone paths.</div>
+        </div>
+        <div id="ride-mapquest-wrap" style="display:none;">
+          <label for="ride-mapquest-select" style="font-size:11px;text-transform:uppercase;letter-spacing:0.4px;color:#6b6152;display:block;margin-bottom:4px;">Travel mode</label>
+          <select id="ride-mapquest-select" style="width:100%;padding:7px;border:1px solid var(--line);border-radius:3px;font-size:12.5px;margin-bottom:4px;background:#fff;">
+            <option value="bicycle">Bicycle</option>
+            <option value="pedestrian">Walking</option>
+            <option value="fastest">Driving — fastest</option>
+            <option value="shortest">Driving — shortest</option>
+          </select>
+          <div class="hint" id="ride-mapquest-hint" style="margin-top:0;margin-bottom:10px;">MapQuest's only cycling mode — no separate road/mountain/e-bike profiles like ORS has.</div>
+        </div>
+        <label for="return-start-checkbox" style="display:flex;align-items:center;gap:8px;margin:0 0 12px 0;font-size:12.5px;color:var(--ink);cursor:pointer;">
+          <input id="return-start-checkbox" type="checkbox">
+          <span>Return to starting point</span>
+        </label>
+        <div class="hint" id="algo-hint" style="margin-top:0;margin-bottom:10px;">Picks the closest stops one-by-one — fast, usually close to optimal.</div>
+        <button class="btn-primary" id="btn-route">Find nearest 5 &amp; route</button>
+        <div id="ors-status" style="font-size:11px;color:#8a7e6a;margin-top:4px;display:none;"></div>
+        <div id="road-request-meter" style="font-size:11px;color:#6b6152;margin-top:4px;display:none;"></div>
+        <ul id="route-list"></ul>
+        <div id="route-empty">No route yet — track your location, then tap the button above.</div>
+        <div class="row" id="gmaps-row" style="display:none;">
+          <a class="btn btn-secondary" id="gmaps-link" href="#" target="_blank" style="text-decoration:none;display:inline-block;">Open in Google Maps (bike)</a>
+        </div>
+      </div>
+      </div>
+
+      <div class="tab-panel" id="tab-list">
+      <div class="section">
+        <h2>All geocoded addresses</h2>
+        <div class="row" style="margin-top:0;margin-bottom:8px;">
+          <button class="tab-btn active" id="sort-added" data-sort="added" style="flex:1;border-radius:3px;">Order added</button>
+          <button class="tab-btn" id="sort-alpha" data-sort="alpha" style="flex:1;border-radius:3px;">A–Z</button>
+          <button class="tab-btn" id="sort-route" data-sort="route" style="flex:1;border-radius:3px;">Route order</button>
+        </div>
+        <div class="row" style="margin-top:0;margin-bottom:10px;">
+          <button class="tab-btn active" id="filter-all" data-filter="all" style="flex:1;border-radius:3px;">All</button>
+          <button class="tab-btn" id="filter-visited" data-filter="visited" style="flex:1;border-radius:3px;">Visited</button>
+          <button class="tab-btn" id="filter-unvisited" data-filter="unvisited" style="flex:1;border-radius:3px;">Not visited</button>
+        </div>
+        <ul id="address-list-ul" style="list-style:none;margin:0;padding:0;font-size:13px;max-height:60vh;overflow-y:auto;"></ul>
+        <div id="address-list-empty" class="hint">No pins yet — add some addresses first.</div>
+        <div class="row" style="margin-top:10px;">
+          <button class="btn-secondary" id="btn-copy-visible" type="button" style="flex:1;margin-top:0;">Copy List</button>
+          <button class="btn-secondary" id="btn-copy-visible-coord" type="button" style="flex:1;margin-top:0;">Copy w/Coord</button>
+        </div>
+        <div id="copy-visible-status" aria-live="polite" style="min-height:16px;margin-top:6px;font-size:11px;color:#6b6152;"></div>
+      </div>
+      </div>
+
+      <div class="tab-panel" id="tab-add">
+      <div class="section">
+        <h2>Add addresses</h2>
+        <textarea id="addr-input" placeholder="123 Main St, Springfield, IL&#10;456 Oak Ave, Springfield, IL&#10;...one per line"></textarea>
+        <div class="hint">Paste your list, one address per line. They're geocoded and saved on this device — come back anytime and they'll still be here.</div>
+        <div class="row">
+          <button class="btn-primary" id="btn-add">Add &amp; plot pins</button>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <button class="btn-secondary" id="btn-saved-lists" type="button">Saved address lists</button>
+        </div>
+        <div id="progress-wrap">
+          <div id="progress-bar"><div id="progress-fill"></div></div>
+          <div id="progress-label"></div>
+          <div class="row">
+            <button class="btn-ghost" id="btn-cancel-add" style="background:var(--sale-red);color:#fff;">Cancel</button>
+          </div>
+        </div>
+        <div id="failed-list"></div>
+      </div>
+      <div class="section" id="danger-zone">
+        <h2>Danger zone</h2>
+        <div class="hint">Permanently erases every address, pin, and visited status saved on this device.</div>
+        <button id="btn-reset" title="Clear all saved addresses">Reset all</button>
+      </div>
+      </div>
+    </div>
+
+    <div id="panel-resizer" title="Drag to resize"></div>
+
+    <div id="map-wrap">
+      <div id="map"></div>
+      <div id="map-toolbar">
+        <div style="position:relative;">
+          <button class="map-toolbar-btn" id="btn-layers" title="Choose map layer">Layers</button>
+          <div id="layer-menu" aria-label="Map layers">
+            <button class="layer-option" data-layer="standard" type="button">Standard</button>
+            <button class="layer-option active" data-layer="bike" type="button">Bike Paths</button>
+            <button class="layer-option" data-layer="terrain" type="button">Terrain</button>
+            <button class="layer-option" data-layer="satellite" type="button">Satellite</button>
+          </div>
+        </div>
+        <button class="map-toolbar-btn" id="btn-zoom-all" title="Zoom to fit all pins">Fit all pins</button>
+        <button class="map-toolbar-btn" id="btn-draw-select" title="Draw a rectangle to select pins">Select box</button>
+        <button class="map-toolbar-btn" id="btn-center-location" title="Center map on my location" style="display:none;">My location</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  const STORAGE_KEY = 'garage-sale-addresses';
+  const SAVED_LISTS_KEY = 'garage-sale-saved-lists';
+  const SETTINGS_KEY = 'garage-sale-settings';
+  const DEFAULT_SETTINGS = {
+    googleMapsTravelMode: 'bicycling',
+    avoidHighways: false,
+    avoidTolls: false,
+    avoidFerries: false,
+    // Which (if any) road-routing service is active. Replaces the old
+    // orsEnabled boolean now that there's a second provider to choose from.
+    routingProvider: 'none', // 'none' | 'ors' | 'mapquest'
+    orsApiKey: '',
+    orsProfile: 'cycling-regular',
+    mapquestApiKey: '',
+    mapquestRouteType: 'bicycle', // 'bicycle' | 'pedestrian' | 'fastest' | 'shortest'
+    // Shared across providers -- it's the same feature (draw the real road
+    // path instead of a straight dashed line) regardless of which service's
+    // Directions endpoint supplies the geometry.
+    roadGeometry: false,
+    mapLayer: 'bike',
+    routeAlgo: 'nearest',
+    routeStopCount: '5',
+    routeReturnToStart: false
+  };
+  let addresses = []; // {id, raw, lat, lon, visited, error}
+  let lastFailedList = []; // raw address strings that failed all geocoders, kept live for manual placement
+  let map, markersLayer, routeLine, meMarker, meAccuracyCircle;
+  let currentPos = null; // {lat, lon}
+  let currentPosSource = null; // 'manual' | 'gps' -- only 'manual' positions get persisted
+  let geoWatchId = null;
+  let settings = {...DEFAULT_SETTINGS};
+  let routeStopNumbers = new Map();
+
+  // ---------- Map setup ----------
+  map = L.map('map', {zoomControl:true}).setView([39.5, -98.35], 4);
+  const baseLayers = {
+    standard: L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }),
+    bike: L.tileLayer('https://tile.openstreetmap.de/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors'
+    }),
+    terrain: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      maxZoom: 17,
+      attribution: 'Map data: &copy; OpenStreetMap contributors, SRTM | Map style: &copy; OpenTopoMap'
+    }),
+    satellite: L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
+      maxZoom: 19,
+      attribution: 'Tiles &copy; Esri'
+    })
+  };
+  function applyMapLayer(layerKey){
+    const key = baseLayers[layerKey] ? layerKey : 'standard';
+    Object.entries(baseLayers).forEach(([name, layer]) => {
+      if(name === key) {
+        if(!map.hasLayer(layer)) layer.addTo(map);
+      } else if(map.hasLayer(layer)) {
+        map.removeLayer(layer);
+      }
+    });
+    settings.mapLayer = key;
+    saveSettings();
+    document.querySelectorAll('.layer-option').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.layer === key);
+    });
+  }
+  baseLayers.standard.addTo(map);
+  markersLayer = L.layerGroup().addTo(map);
+
+  function pinIcon(color){
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        width:22px;height:22px;border-radius:50% 50% 50% 0;
+        background:${color};transform:rotate(-45deg);
+        border:2px solid #2A2117; box-shadow:0 1px 3px rgba(0,0,0,0.4);
+      "></div>`,
+      iconSize:[22,22],
+      iconAnchor:[11,22],
+      popupAnchor:[0,-22]
+    });
+  }
+
+  function numberedPinIcon(color, number){
+    return L.divIcon({
+      className: '',
+      html: `<div style="
+        width:26px;height:26px;border-radius:50%;
+        background:${color};
+        border:2px solid #2A2117; box-shadow:0 1px 3px rgba(0,0,0,0.45);
+        display:flex;align-items:center;justify-content:center;
+        color:#fff;font-weight:800;font-size:12px;line-height:1;
+        font-family:Arial, sans-serif;
+      ">${number}</div>`,
+      iconSize:[26,26],
+      iconAnchor:[13,13],
+      popupAnchor:[0,-13]
+    });
+  }
+  const ICON_UNVISITED = pinIcon('#C8412C');
+  const ICON_VISITED = pinIcon('#3E7047');
+
+  // ---------- Persistence ----------
+  // Prefer Claude's built-in storage (works inside the artifact panel). If it's not
+  // available — e.g. the file was downloaded and opened on its own — fall back to
+  // localStorage so progress still saves when this is hosted at a real http(s) address.
+  // Some browsers block storage in strict privacy modes; when that happens, fall
+  // back to an in-memory cache instead of throwing repeated warnings to the console.
+  const hasClaudeStorage = (typeof window.storage !== 'undefined') && window.storage && typeof window.storage.get === 'function';
+  const memoryStorage = {};
+
+  function readStorageValue(key){
+    try{
+      if(typeof localStorage !== 'undefined') return localStorage.getItem(key);
+    }catch(e){
+      return memoryStorage[key] ?? null;
+    }
+    return memoryStorage[key] ?? null;
+  }
+
+  function writeStorageValue(key, value){
+    try{
+      if(typeof localStorage !== 'undefined'){
+        localStorage.setItem(key, value);
+      }
+      memoryStorage[key] = value;
+      return true;
+    }catch(e){
+      memoryStorage[key] = value;
+      return false;
+    }
+  }
+
+  async function loadAddresses(){
+    try{
+      if(hasClaudeStorage){
+        const res = await window.storage.get(STORAGE_KEY, false);
+        if(res && res.value) addresses = JSON.parse(res.value);
+      } else {
+        const raw = readStorageValue(STORAGE_KEY);
+        if(raw) addresses = JSON.parse(raw);
+      }
+    }catch(e){
+      addresses = [];
+    }
+  }
+  async function saveAddresses(){
+    try{
+      if(hasClaudeStorage){
+        await window.storage.set(STORAGE_KEY, JSON.stringify(addresses), false);
+      } else {
+        writeStorageValue(STORAGE_KEY, JSON.stringify(addresses));
+      }
+    }catch(e){
+      memoryStorage[STORAGE_KEY] = JSON.stringify(addresses);
+    }
+  }
+
+  async function loadSavedLists(){
+    try{
+      if(hasClaudeStorage){
+        const result = await window.storage.get(SAVED_LISTS_KEY, false);
+        const parsed = result && result.value ? JSON.parse(result.value) : [];
+        return Array.isArray(parsed) ? parsed : [];
+      }
+      const raw = readStorageValue(SAVED_LISTS_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    }catch(e){
+      return [];
+    }
+  }
+
+  async function saveSavedLists(lists){
+    const value = JSON.stringify(lists);
+    if(hasClaudeStorage){
+      await window.storage.set(SAVED_LISTS_KEY, value, false);
+    } else {
+      writeStorageValue(SAVED_LISTS_KEY, value);
+    }
+  }
+
+  const ALGO_LABELS = {
+    nearest: 'nearest-neighbor',
+    optimal: 'optimal order',
+    twoopt: '2-opt',
+    manual: 'manual order'
+  };
+
+  // Snapshot of everything a saved list carries. The manual order is stored as
+  // positions rather than address ids, because Restore mints brand-new ids --
+  // ids saved here would never match after a restore.
+  function buildSavedListPayload(){
+    const snapshot = addresses.map(address => ({...address}));
+    const payload = {
+      addresses: snapshot,
+      travelMode: settings.googleMapsTravelMode || DEFAULT_SETTINGS.googleMapsTravelMode,
+      routeAlgo: settings.routeAlgo || DEFAULT_SETTINGS.routeAlgo,
+      stopCount: settings.routeStopCount || DEFAULT_SETTINGS.routeStopCount,
+      returnToStart: !!settings.routeReturnToStart,
+      // "Travel mode" in the Ride tab -- the OpenRouteService cycling profile
+      // (ride-profile-select), a different setting from the Google Maps
+      // travel mode above despite the similar name. API keys are never saved
+      // here -- they're a device credential, not something tied to a route.
+      routingProvider: settings.routingProvider || DEFAULT_SETTINGS.routingProvider,
+      orsProfile: settings.orsProfile || DEFAULT_SETTINGS.orsProfile,
+      mapquestRouteType: settings.mapquestRouteType || DEFAULT_SETTINGS.mapquestRouteType,
+      avoidHighways: !!settings.avoidHighways,
+      avoidTolls: !!settings.avoidTolls,
+      avoidFerries: !!settings.avoidFerries
+    };
+    if(payload.routeAlgo === 'manual'){
+      const indexById = new Map(snapshot.map((a, i) => [a.id, i]));
+      payload.manualOrder = loadManualOrder()
+        .map(id => indexById.get(id))
+        .filter(i => i !== undefined);
+    }
+    if(currentPos && currentPosSource === 'manual'){
+      payload.manualLocation = {lat: currentPos.lat, lon: currentPos.lon};
+    }
+    return payload;
+  }
+
+  // Opens the shared confirm dialog. `setFlag` stashes whatever the yes-handler
+  // needs to act on, matching the existing window.* pending-action pattern.
+  function askConfirm(message, yesLabel, setFlag){
+    setFlag();
+    document.getElementById('confirm-message').textContent = message;
+    document.getElementById('btn-confirm-yes').textContent = yesLabel;
+    document.getElementById('confirm-modal-overlay').classList.add('visible');
+    document.getElementById('confirm-modal').classList.add('visible');
+    window.history.pushState({modal: 'confirm'}, '');
+  }
+
+  async function renderSavedLists(){
+    const lists = (await loadSavedLists()).slice().sort((a, b) => {
+      const aTime = Date.parse(a.savedAt) || 0;
+      const bTime = Date.parse(b.savedAt) || 0;
+      return bTime - aTime;
+    });
+    const container = document.getElementById('saved-lists');
+    const empty = document.getElementById('saved-lists-empty');
+    empty.style.display = lists.length ? 'none' : 'block';
+    container.innerHTML = '';
+    lists.forEach(list => {
+      const count = Array.isArray(list.addresses) ? list.addresses.length : 0;
+      const savedOn = new Date(list.savedAt).toLocaleDateString();
+      const row = document.createElement('div');
+      row.className = 'saved-list-row';
+      const details = document.createElement('div');
+      details.className = 'saved-list-details';
+      const listName = document.createElement('div');
+      listName.className = 'saved-list-name';
+      listName.textContent = list.name;
+      const meta = document.createElement('div');
+      meta.className = 'saved-list-meta';
+      // Surface the stored travel mode / algorithm so it's clear what a
+      // Restore is about to change, not just how many addresses come back.
+      const bits = [`${count} address${count === 1 ? '' : 'es'}`, `saved ${savedOn}`];
+      if(list.travelMode) bits.push(list.travelMode);
+      if(list.routeAlgo) bits.push(ALGO_LABELS[list.routeAlgo] || list.routeAlgo);
+      if(list.stopCount) bits.push(`${list.stopCount} stops`);
+      if(list.returnToStart) bits.push('round trip');
+      if(list.routingProvider === 'mapquest'){
+        const mqSel = document.getElementById('ride-mapquest-select');
+        const opt = mqSel && [...mqSel.options].find(o => o.value === list.mapquestRouteType);
+        bits.push(opt ? opt.text : list.mapquestRouteType);
+      } else if(list.orsProfile){
+        const rideSel = document.getElementById('ride-profile-select');
+        const opt = rideSel && [...rideSel.options].find(o => o.value === list.orsProfile);
+        bits.push(opt ? opt.text : list.orsProfile);
+      }
+      if(list.manualLocation) bits.push('saved location');
+      meta.textContent = bits.join(' · ');
+      const restore = document.createElement('button');
+      restore.className = 'btn-secondary';
+      restore.type = 'button';
+      restore.dataset.restoreList = list.id;
+      restore.textContent = 'Restore';
+      const overwrite = document.createElement('button');
+      overwrite.className = 'btn-ghost';
+      overwrite.type = 'button';
+      overwrite.style.color = 'var(--ink)';
+      overwrite.style.borderColor = 'var(--line)';
+      overwrite.dataset.overwriteList = list.id;
+      overwrite.setAttribute('aria-label', `Overwrite ${list.name} with the current list`);
+      overwrite.textContent = 'Overwrite';
+      const remove = document.createElement('button');
+      remove.className = 'icon-btn';
+      remove.type = 'button';
+      remove.dataset.deleteList = list.id;
+      remove.title = `Delete ${list.name}`;
+      remove.setAttribute('aria-label', `Delete ${list.name}`);
+      remove.innerHTML = ICON_TRASH;
+      details.append(listName, meta);
+      row.append(details, restore, overwrite, remove);
+      container.append(row);
+    });
+  }
+
+  async function openSavedListsModal(){
+    await renderSavedLists();
+    document.getElementById('saved-lists-modal-overlay').classList.add('visible');
+    document.getElementById('saved-lists-modal').classList.add('visible');
+    window.history.pushState({modal: 'saved-lists'}, '');
+    setTimeout(() => document.getElementById('saved-list-name').focus(), 0);
+  }
+
+  function closeSavedListsModal(){
+    document.getElementById('saved-lists-modal-overlay').classList.remove('visible');
+    document.getElementById('saved-lists-modal').classList.remove('visible');
+  }
+
+  // Clipboard API needs a secure context; the textarea+execCommand path keeps
+  // copying working on plain http (e.g. a phone hitting this over the LAN).
+  async function writeToClipboard(text){
+    try{
+      if(navigator.clipboard && window.isSecureContext){
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.append(textarea);
+      textarea.select();
+      const copied = document.execCommand('copy');
+      textarea.remove();
+      return copied;
+    }catch(e){
+      return false;
+    }
+  }
+
+  async function copyCurrentAddresses(){
+    const status = document.getElementById('copy-addresses-status');
+    const orderedAddresses = addresses.slice().sort((a, b) => {
+      const aStop = routeStopNumbers.get(a.id);
+      const bStop = routeStopNumbers.get(b.id);
+      if(aStop && bStop) return aStop - bStop;
+      if(aStop) return -1;
+      if(bStop) return 1;
+      return addresses.indexOf(a) - addresses.indexOf(b);
+    });
+    const text = orderedAddresses.map(address => {
+      const stop = routeStopNumbers.get(address.id);
+      return stop ? `${stop}. ${address.raw}` : address.raw;
+    }).join('\n');
+    if(!text){
+      status.textContent = 'Add an address before copying a list.';
+      return;
+    }
+    if(await writeToClipboard(text)){
+      status.textContent = `${addresses.length} address${addresses.length === 1 ? '' : 'es'} copied.`;
+    } else {
+      status.textContent = 'Could not copy automatically. Select the addresses from a saved list instead.';
+    }
+  }
+
+  async function restoreSavedList(id){
+    const list = (await loadSavedLists()).find(item => item.id === id);
+    if(!list || !Array.isArray(list.addresses)) return;
+    addresses = list.addresses.map((address, index) => ({...address, id: `a_restore_${Date.now()}_${index}`}));
+    lastFailedList = addresses.filter(address => address.error).map(address => address.raw);
+
+    // Older saved lists predate these fields, so only apply what's present.
+    if(list.travelMode) settings.googleMapsTravelMode = list.travelMode;
+    if(list.routeAlgo) settings.routeAlgo = list.routeAlgo;
+    if(list.stopCount) settings.routeStopCount = list.stopCount;
+    if(typeof list.returnToStart === 'boolean') settings.routeReturnToStart = list.returnToStart;
+    if(list.orsProfile) settings.orsProfile = list.orsProfile;
+    if(list.mapquestRouteType) settings.mapquestRouteType = list.mapquestRouteType;
+    if(list.routingProvider) settings.routingProvider = list.routingProvider;
+    if(typeof list.avoidHighways === 'boolean') settings.avoidHighways = list.avoidHighways;
+    if(typeof list.avoidTolls === 'boolean') settings.avoidTolls = list.avoidTolls;
+    if(typeof list.avoidFerries === 'boolean') settings.avoidFerries = list.avoidFerries;
+    if(list.travelMode || list.routeAlgo || list.stopCount || typeof list.returnToStart === 'boolean'
+       || list.orsProfile || list.mapquestRouteType || list.routingProvider
+       || typeof list.avoidHighways === 'boolean' || typeof list.avoidTolls === 'boolean' || typeof list.avoidFerries === 'boolean'){
+      saveSettings();
+      loadSettings(); // re-syncs the selects, algo hint and route button label
+    }
+    if(list.manualLocation && typeof list.manualLocation.lat === 'number' && typeof list.manualLocation.lon === 'number'){
+      currentPos = {lat: list.manualLocation.lat, lon: list.manualLocation.lon};
+      currentPosSource = 'manual';
+      saveManualLocation(currentPos);
+      placeMeMarker(currentPos.lat, currentPos.lon);
+      document.getElementById('geo-status').textContent = 'Location restored from saved list — tap "Track my location" for GPS, or tap the map to update.';
+    }
+    // Map saved positions back onto the freshly minted address ids.
+    if(Array.isArray(list.manualOrder)){
+      const ids = list.manualOrder
+        .map(i => addresses[i])
+        .filter(Boolean)
+        .map(a => a.id);
+      try{ localStorage.setItem(MANUAL_ORDER_KEY, JSON.stringify(ids)); }catch(e){}
+    }
+    roadMatrixCache = null;
+
+    await saveAddresses();
+    renderPins();
+    renderFailedList(lastFailedList);
+    updateStats();
+    if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+    document.getElementById('route-list').innerHTML = '';
+    document.getElementById('route-empty').style.display = 'block';
+    document.getElementById('route-empty').textContent = 'Address list restored — pick a new route when ready.';
+    document.getElementById('gmaps-row').style.display = 'none';
+    closeSavedListsModal();
+    if(addresses.some(address => !address.error && address.lat != null)) fitToPins();
+  }
+
+  function loadSettings(){
+    try{
+      const raw = readStorageValue(SETTINGS_KEY);
+      if(raw){
+        const parsed = JSON.parse(raw);
+        // One-time migration: earlier versions used a single orsEnabled
+        // boolean and an ORS-only orsRoadGeometry flag. Translate old saved
+        // data instead of silently reverting an existing setup to "none"/off
+        // now that there's a second provider to choose from.
+        if(parsed.routingProvider === undefined && parsed.orsEnabled !== undefined){
+          parsed.routingProvider = parsed.orsEnabled ? 'ors' : 'none';
+        }
+        if(parsed.roadGeometry === undefined && parsed.orsRoadGeometry !== undefined){
+          parsed.roadGeometry = parsed.orsRoadGeometry;
+        }
+        settings = {...DEFAULT_SETTINGS, ...parsed};
+      }
+    }catch(e){
+      settings = {...DEFAULT_SETTINGS};
+    }
+    const select = document.getElementById('travel-mode-select');
+    if(select) select.value = settings.googleMapsTravelMode || DEFAULT_SETTINGS.googleMapsTravelMode;
+    const avoidHighways = document.getElementById('avoid-highways');
+    const avoidTolls = document.getElementById('avoid-tolls');
+    const avoidFerries = document.getElementById('avoid-ferries');
+    if(avoidHighways) avoidHighways.checked = !!settings.avoidHighways;
+    if(avoidTolls) avoidTolls.checked = !!settings.avoidTolls;
+    if(avoidFerries) avoidFerries.checked = !!settings.avoidFerries;
+
+    const providerSel = document.getElementById('routing-provider-select');
+    if(providerSel){
+      const wanted = settings.routingProvider || DEFAULT_SETTINGS.routingProvider;
+      providerSel.value = [...providerSel.options].some(o => o.value === wanted) ? wanted : DEFAULT_SETTINGS.routingProvider;
+    }
+    const orsApiKey = document.getElementById('ors-api-key');
+    const orsProfile = document.getElementById('ors-profile-select');
+    if(orsApiKey) orsApiKey.value = settings.orsApiKey || '';
+    if(orsProfile) orsProfile.value = settings.orsProfile || DEFAULT_SETTINGS.orsProfile;
+    const mapquestApiKey = document.getElementById('mapquest-api-key');
+    const mapquestRouteType = document.getElementById('mapquest-route-type-select');
+    if(mapquestApiKey) mapquestApiKey.value = settings.mapquestApiKey || '';
+    if(mapquestRouteType) mapquestRouteType.value = settings.mapquestRouteType || DEFAULT_SETTINGS.mapquestRouteType;
+    const roadGeom = document.getElementById('road-geometry');
+    if(roadGeom) roadGeom.checked = !!settings.roadGeometry;
+    syncProfileUI();
+
+    // Ride-tab routing controls. Without these the page silently reverts to
+    // nearest-neighbor / 5 stops on every reload, which quietly throws away a
+    // Manual order selection (the saved order survives, the mode doesn't).
+    const algoSel = document.getElementById('algo-select');
+    const stopsSel = document.getElementById('stops-select');
+    const returnChk = document.getElementById('return-start-checkbox');
+    if(algoSel){
+      // Guard against a stale value naming an option that no longer exists.
+      const wanted = settings.routeAlgo || DEFAULT_SETTINGS.routeAlgo;
+      algoSel.value = [...algoSel.options].some(o => o.value === wanted) ? wanted : DEFAULT_SETTINGS.routeAlgo;
+      const hintEl = document.getElementById('algo-hint');
+      if(hintEl) hintEl.textContent = ALGO_HINTS[algoSel.value] || '';
+    }
+    if(stopsSel){
+      const wanted = String(settings.routeStopCount || DEFAULT_SETTINGS.routeStopCount);
+      if([...stopsSel.options].some(o => o.value === wanted)) stopsSel.value = wanted;
+      updateRouteButtonLabel();
+    }
+    if(returnChk) returnChk.checked = !!settings.routeReturnToStart;
+
+    if(settings.mapLayer && baseLayers[settings.mapLayer]) {
+      applyMapLayer(settings.mapLayer);
+    } else {
+      applyMapLayer('bike');
+    }
+  }
+
+  // Short plain-language note per routing profile. The rail-trail distinction
+  // matters most: only cycling-regular reliably routes onto converted rail
+  // corridors, since those are usually crushed limestone and the road-bike
+  // profile treats unpaved as off-limits.
+  const PROFILE_HINTS = {
+    'cycling-regular': 'Happily rides rail-trails, greenways, and crushed-limestone paths.',
+    'cycling-electric': 'Like a regular bike, but assumes you keep speed up on hills.',
+    'cycling-road': 'Sticks to pavement — will route around unpaved trails.',
+    'cycling-mountain': 'Tuned for rough off-road terrain; often prefers streets over smooth trails.',
+    'foot-walking': 'Uses sidewalks and footpaths.',
+    'driving-car': 'Road network only — ignores trails and bike paths.'
+  };
+  const MAPQUEST_HINTS = {
+    'bicycle': "MapQuest's only cycling mode — no separate road/mountain/e-bike profiles like ORS has.",
+    'pedestrian': 'Uses sidewalks and footpaths.',
+    'fastest': 'Driving, optimized for travel time.',
+    'shortest': 'Driving, optimized for distance.'
+  };
+
+  // Keeps the Ride-tab and Settings-modal pickers in agreement, and shows
+  // only the sub-panel for whichever routing provider is active (or neither,
+  // when road routing is off).
+  function syncProfileUI(){
+    const provider = settings.routingProvider || DEFAULT_SETTINGS.routingProvider;
+
+    const profile = settings.orsProfile || DEFAULT_SETTINGS.orsProfile;
+    const rideSel = document.getElementById('ride-profile-select');
+    const setSel = document.getElementById('ors-profile-select');
+    const wrap = document.getElementById('ride-profile-wrap');
+    const hint = document.getElementById('ride-profile-hint');
+    if(rideSel) rideSel.value = profile;
+    if(setSel) setSel.value = profile;
+    if(hint) hint.textContent = PROFILE_HINTS[profile] || '';
+    if(wrap) wrap.style.display = provider === 'ors' ? 'block' : 'none';
+
+    const routeType = settings.mapquestRouteType || DEFAULT_SETTINGS.mapquestRouteType;
+    const rideMQSel = document.getElementById('ride-mapquest-select');
+    const setMQSel = document.getElementById('mapquest-route-type-select');
+    const mqWrap = document.getElementById('ride-mapquest-wrap');
+    const mqHint = document.getElementById('ride-mapquest-hint');
+    if(rideMQSel) rideMQSel.value = routeType;
+    if(setMQSel) setMQSel.value = routeType;
+    if(mqHint) mqHint.textContent = MAPQUEST_HINTS[routeType] || '';
+    if(mqWrap) mqWrap.style.display = provider === 'mapquest' ? 'block' : 'none';
+
+    const orsSub = document.getElementById('ors-sub-settings');
+    const mapquestSub = document.getElementById('mapquest-sub-settings');
+    if(orsSub) orsSub.style.display = provider === 'ors' ? 'block' : 'none';
+    if(mapquestSub) mapquestSub.style.display = provider === 'mapquest' ? 'block' : 'none';
+
+    const roadGeomWrap = document.getElementById('road-geometry-wrap');
+    if(roadGeomWrap) roadGeomWrap.style.display = provider === 'none' ? 'none' : 'block';
+  }
+
+  // "1.4 mi" / "26 min" / "1 h 24 min"
+  function formatDuration(seconds){
+    const mins = Math.round(seconds / 60);
+    if(mins < 60) return `${mins} min`;
+    const h = Math.floor(mins / 60);
+    return `${h} h ${mins % 60} min`;
+  }
+
+  // ---------- Manual route order ----------
+  // Stored separately from settings: it's route data (a list of address ids),
+  // not a preference, and it gets rewritten on every drag.
+  const MANUAL_ORDER_KEY = 'garage-sale-manual-order';
+  // A manually-tapped location, kept separately from settings because it's
+  // session state (where you are), not a preference.
+  const MANUAL_LOCATION_KEY = 'garage-sale-manual-location';
+
+  function saveManualLocation(pos){
+    try{ writeStorageValue(MANUAL_LOCATION_KEY, JSON.stringify(pos)); }catch(e){}
+  }
+
+  function loadManualLocation(){
+    try{
+      const raw = readStorageValue(MANUAL_LOCATION_KEY);
+      const parsed = raw ? JSON.parse(raw) : null;
+      return (parsed && typeof parsed.lat === 'number' && typeof parsed.lon === 'number') ? parsed : null;
+    }catch(e){
+      return null;
+    }
+  }
+
+  function loadManualOrder(){
+    try{
+      const raw = localStorage.getItem(MANUAL_ORDER_KEY);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    }catch(e){
+      return [];
+    }
+  }
+
+  // Stops currently hidden from the route (because the stop-count cap trimmed
+  // them) still have a saved position — keep them on the tail so shrinking and
+  // then re-growing the stop count doesn't silently destroy an arrangement.
+  function saveManualOrder(visibleIds){
+    try{
+      const tail = loadManualOrder().filter(id => !visibleIds.includes(id));
+      localStorage.setItem(MANUAL_ORDER_KEY, JSON.stringify([...visibleIds, ...tail]));
+    }catch(e){
+      console.error('Could not save manual order', e);
+    }
+  }
+
+  // Saved order first (minus anything now visited or deleted), then any stops
+  // it doesn't know about appended so new pins are reachable, capped to the
+  // chosen stop count.
+  function resolveManualOrder(unvisited, stopCount){
+    const byId = new Map(unvisited.map(a => [a.id, a]));
+    const kept = loadManualOrder().map(id => byId.get(id)).filter(Boolean);
+    const keptIds = new Set(kept.map(a => a.id));
+    const rest = unvisited.filter(a => !keptIds.has(a.id));
+    return [...kept, ...rest].slice(0, stopCount);
+  }
+
+  function saveSettings(){
+    try{
+      writeStorageValue(SETTINGS_KEY, JSON.stringify(settings));
+    }catch(e){
+      memoryStorage[SETTINGS_KEY] = JSON.stringify(settings);
+    }
+  }
+
+  // ---------- Address formatting ----------
+  function formatAddress(rawAddr){
+    // Format: "Description, 123 Street, City, State ZIP"
+    // Returns: {lines: ['Description', '123 Street', 'City, State ZIP'], formatted: 'all lines joined'}
+    const parts = rawAddr.split(',').map(p => p.trim()).filter(p => p);
+
+    if(parts.length === 0) return {lines: [rawAddr], formatted: rawAddr};
+
+    const lines = [];
+    let description = '';
+    let street = '';
+    let cityStateZip = '';
+
+    // Check if first part is a description (doesn't start with a number)
+    if(parts.length > 1 && !/^\d/.test(parts[0])) {
+      description = parts[0];
+
+      // Second part should be street (starts with number)
+      if(/^\d/.test(parts[1])) {
+        street = parts[1];
+        // Rest is city, state, zip
+        cityStateZip = parts.slice(2).join(', ');
+      } else {
+        // No street found, treat remaining as city/state
+        street = parts[1];
+        cityStateZip = parts.slice(2).join(', ');
+      }
+    } else {
+      // First part is street address
+      street = parts[0];
+      // Rest is city, state, zip
+      cityStateZip = parts.slice(1).join(', ');
+    }
+
+    // Build lines array
+    if(description) lines.push(description);
+    if(street) lines.push(street);
+    if(cityStateZip) lines.push(cityStateZip);
+
+    if(lines.length === 0) lines.push(rawAddr);
+
+    return {
+      lines: lines,
+      formatted: lines.join('\n')
+    };
+  }
+
+  function formatAddressHtml(rawAddr){
+    const formatted = formatAddress(rawAddr);
+    const div = document.createElement('div');
+    formatted.lines.forEach((line, idx) => {
+      if(idx > 0) div.appendChild(document.createElement('br'));
+      const span = document.createElement('span');
+      span.textContent = line;
+      div.appendChild(span);
+    });
+    return div;
+  }
+
+  // ---------- Rendering ----------
+  let markerById = {};
+  function renderPins(){
+    markersLayer.clearLayers();
+    markerById = {};
+    addresses.forEach(a => {
+      if(a.error || a.lat == null) return;
+      const routeNum = routeStopNumbers.get(a.id);
+      const icon = routeNum ? numberedPinIcon(a.visited ? '#3E7047' : '#C8412C', routeNum) : (a.visited ? ICON_VISITED : ICON_UNVISITED);
+      const marker = L.marker([a.lat, a.lon], {icon});
+      marker.bindPopup(buildPopup(a));
+      marker.addTo(markersLayer);
+      markerById[a.id] = marker;
+    });
+  }
+
+  // Simple line-style icons (24x24 viewBox) for the popup's icon row.
+  const ICON_CHECK = '<svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>';
+  const ICON_UNDO = '<svg viewBox="0 0 24 24"><path d="M9 14 4 9l5-5"/><path d="M4 9h10a6 6 0 1 1 0 12h-1"/></svg>';
+  const ICON_NAV = '<svg viewBox="0 0 24 24"><path d="M3 11l18-8-8 18-2-8-8-2z"/></svg>';
+  const ICON_TRASH = '<svg viewBox="0 0 24 24"><path d="M4 7h16"/><path d="M9 7V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v3"/><path d="M6 7l1 13a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-13"/></svg>';
+  const ICON_PENCIL = '<svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>';
+
+  function buildPopup(a){
+    const div = document.createElement('div');
+    const label = document.createElement('div');
+    label.className = 'popup-addr';
+
+    // Format and display the address
+    const formatted = formatAddress(a.raw);
+    formatted.lines.forEach((line, idx) => {
+      if(idx > 0) label.appendChild(document.createElement('br'));
+      const span = document.createElement('span');
+      span.textContent = line;
+      label.appendChild(span);
+    });
+
+    div.appendChild(label);
+
+    // One row of icon buttons — text labels for "Mark visited" / "Navigate
+    // to" / "Remove" used to stack into 3 rows and crowd out the address
+    // text in the popup bubble.
+    const btnRow = document.createElement('div');
+    btnRow.className = 'popup-icon-row';
+
+    // Mark visited/unvisited button
+    const visitBtn = document.createElement('button');
+    visitBtn.className = 'popup-icon-btn';
+    visitBtn.style.background = a.visited ? '#D4A574' : '#3E7047';
+    visitBtn.title = a.visited ? 'Mark not visited' : 'Mark visited';
+    visitBtn.innerHTML = a.visited ? ICON_UNDO : ICON_CHECK;
+    visitBtn.onclick = async () => {
+      a.visited = !a.visited;
+      await saveAddresses();
+      renderPins();
+      updateStats();
+      map.closePopup();
+    };
+    btnRow.appendChild(visitBtn);
+
+    // Navigate to button
+    const navBtn = document.createElement('button');
+    navBtn.className = 'popup-icon-btn';
+    navBtn.style.background = '#2E86FF';
+    navBtn.title = 'Navigate to';
+    navBtn.innerHTML = ICON_NAV;
+    navBtn.onclick = () => {
+      const isMobile = /Android|iPhone|iPad|iPod/.test(navigator.userAgent);
+      const query = encodeURIComponent(a.raw);
+      if(isMobile){
+        // Try to open Google Maps app first, then fall back to web
+        window.location.href = `geo:0,0?q=${query}`;
+        setTimeout(() => {
+          window.location.href = `https://www.google.com/maps/search/${query}`;
+        }, 1000);
+      } else {
+        window.open(`https://www.google.com/maps/search/${query}`, '_blank');
+      }
+    };
+    btnRow.appendChild(navBtn);
+
+    // Edit button
+    const editBtn = document.createElement('button');
+    editBtn.className = 'popup-icon-btn';
+    editBtn.style.background = '#2E86FF';
+    editBtn.title = 'Edit';
+    editBtn.innerHTML = ICON_PENCIL;
+    editBtn.onclick = () => {
+      window.addressToEdit = a;
+      document.getElementById('edit-pin-input').value = a.raw;
+      document.getElementById('edit-pin-modal-overlay').classList.add('visible');
+      document.getElementById('edit-pin-modal').classList.add('visible');
+      window.history.pushState({modal: 'edit-pin'}, '');
+      setTimeout(() => document.getElementById('edit-pin-input').focus(), 50);
+      map.closePopup();
+    };
+    btnRow.appendChild(editBtn);
+
+    // Remove button
+    const rmBtn = document.createElement('button');
+    rmBtn.className = 'popup-icon-btn';
+    rmBtn.style.background = '#999';
+    rmBtn.title = 'Remove';
+    rmBtn.innerHTML = ICON_TRASH;
+    rmBtn.onclick = () => {
+      // Show confirm modal instead of using confirm()
+      document.getElementById('confirm-message').textContent = `Remove "${a.raw}"?`;
+      document.getElementById('confirm-modal-overlay').classList.add('visible');
+      document.getElementById('confirm-modal').classList.add('visible');
+      window.history.pushState({modal: 'confirm'}, '');
+      // Store the address to remove in case user confirms
+      window.addressToRemove = a;
+    };
+    btnRow.appendChild(rmBtn);
+
+    div.appendChild(btnRow);
+    return div;
+  }
+
+  // ---------- Address list (all pins, sortable) ----------
+  let addressListSort = 'added'; // 'added' | 'alpha' | 'route'
+  let addressListFilter = 'all'; // 'all' | 'visited' | 'unvisited'
+
+  // The rows shown on the All addresses tab, after the active filter and sort.
+  // Shared by the renderer and the copy button so they can't drift apart.
+  function getVisibleAddressList(){
+    let plotted = addresses.filter(a => !a.error && a.lat != null);
+    if(addressListFilter === 'visited') plotted = plotted.filter(a => a.visited);
+    else if(addressListFilter === 'unvisited') plotted = plotted.filter(a => !a.visited);
+    const list = plotted.slice();
+    if(addressListSort === 'alpha'){
+      list.sort((a,b) => a.raw.localeCompare(b.raw));
+    } else if(addressListSort === 'route'){
+      list.sort((a, b) => {
+        const aStop = routeStopNumbers.get(a.id);
+        const bStop = routeStopNumbers.get(b.id);
+        if(aStop && bStop) return aStop - bStop;
+        if(aStop) return -1;
+        if(bStop) return 1;
+        return addresses.indexOf(a) - addresses.indexOf(b);
+      });
+    }
+    // 'added' = keep natural array order (already insertion order)
+    return list;
+  }
+
+  async function copyVisibleAddressList(){
+    const status = document.getElementById('copy-visible-status');
+    const visible = getVisibleAddressList();
+    if(visible.length === 0){
+      status.textContent = 'Nothing to copy in this view.';
+      return;
+    }
+    // Number the lines when showing route order, so the copied text carries
+    // the sequence rather than looking like an unordered list.
+    const text = visible
+      .map((a, i) => addressListSort === 'route' ? `${i + 1}. ${a.raw}` : a.raw)
+      .join('\n');
+    if(await writeToClipboard(text)){
+      const scope = addressListFilter === 'all' ? '' : ` ${addressListFilter}`;
+      status.textContent = `${visible.length}${scope} address${visible.length === 1 ? '' : 'es'} copied.`;
+    } else {
+      status.textContent = 'Could not copy automatically — select the text from the list instead.';
+    }
+  }
+
+  async function copyVisibleAddressListWithCoordinates(){
+    const status = document.getElementById('copy-visible-status');
+    const visible = getVisibleAddressList();
+    if(visible.length === 0){
+      status.textContent = 'Nothing to copy in this view.';
+      return;
+    }
+    const text = visible.map((a, i) => {
+      const label = addressListSort === 'route' ? `${i + 1}. ${a.raw}` : a.raw;
+      return a.lat != null && a.lon != null ? `${label} | @${a.lat},${a.lon}` : label;
+    }).join('\n');
+    if(await writeToClipboard(text)){
+      const scope = addressListFilter === 'all' ? '' : ` ${addressListFilter}`;
+      status.textContent = `${visible.length}${scope} address${visible.length === 1 ? '' : 'es'} with coordinates copied.`;
+    } else {
+      status.textContent = 'Could not copy automatically — select the text from the list instead.';
+    }
+  }
+
+  function renderAddressList(){
+    const ul = document.getElementById('address-list-ul');
+    const emptyEl = document.getElementById('address-list-empty');
+    if(!ul) return;
+    ul.innerHTML = '';
+    const plotted = getVisibleAddressList();
+
+    if(plotted.length === 0){
+      emptyEl.style.display = 'block';
+      emptyEl.textContent = addresses.filter(a => !a.error && a.lat != null).length === 0
+        ? 'No pins yet — add some addresses first.'
+        : `No ${addressListFilter === 'visited' ? 'visited' : 'unvisited'} addresses to show.`;
+      return;
+    }
+    emptyEl.style.display = 'none';
+    const copyStatus = document.getElementById('copy-visible-status');
+    if(copyStatus) copyStatus.textContent = '';
+
+    plotted.forEach(a => {
+      const li = document.createElement('li');
+      li.className = 'addr-list-row';
+      const dot = document.createElement('span');
+      dot.className = 'dot';
+      dot.style.background = a.visited ? '#3E7047' : '#C8412C';
+      const txt = document.createElement('span');
+      txt.className = 'txt';
+
+      // Format and display the address
+      const formatted = formatAddress(a.raw);
+      formatted.lines.forEach((line, idx) => {
+        if(idx > 0) txt.appendChild(document.createElement('br'));
+        const span = document.createElement('span');
+        span.textContent = line;
+        txt.appendChild(span);
+      });
+
+      li.appendChild(dot);
+      li.appendChild(txt);
+      li.onclick = () => selectAddressOnMap(a.id);
+      li.dataset.addrId = a.id;
+      ul.appendChild(li);
+    });
+  }
+
+  function selectAddressOnMap(id){
+    const a = addresses.find(x => x.id === id);
+    if(!a || a.lat == null) return;
+    document.querySelectorAll('.addr-list-row').forEach(row => row.classList.remove('selected'));
+    const row = document.querySelector(`.addr-list-row[data-addr-id="${id}"]`);
+    if(row) row.classList.add('selected');
+
+    const marker = markerById[id];
+    const zoom = 18;
+    // The popup opens above the marker. If we center on the marker itself,
+    // the popup (title + 3 buttons, ~150px tall) needs all of that room
+    // ABOVE the center point — plenty on desktop, but on a short mobile map
+    // viewport that pushes the popup's top (and its close button) right off
+    // the edge. Instead, shift the requested center down by half the
+    // popup's height so the popup+pin land centered as a group, with the
+    // marker sitting a bit below the exact middle. Popup height varies a
+    // little with content, but this fixed estimate is close enough to keep
+    // it fully visible without over-engineering per-popup measurement.
+    const POPUP_HEIGHT_ESTIMATE = 150;
+    const targetPoint = map.project([a.lat, a.lon], zoom).subtract([0, POPUP_HEIGHT_ESTIMATE / 2]);
+    const targetLatLng = map.unproject(targetPoint, zoom);
+
+    const openIt = () => {
+      if(!marker || marker.isPopupOpen()) return;
+      // Also suppress the popup's own auto-pan — we've already accounted
+      // for its height above, so we don't want Leaflet nudging further.
+      const popup = marker.getPopup();
+      const hadAutoPan = popup ? popup.options.autoPan : true;
+      if(popup) popup.options.autoPan = false;
+      marker.openPopup();
+      if(popup) popup.options.autoPan = hadAutoPan;
+    };
+
+    // Open the popup only once the pan/zoom animation has actually settled
+    // on the new center — opening it mid-animation reads a still-moving
+    // (stale) view for positioning.
+    map.once('moveend', openIt);
+    map.setView(targetLatLng, zoom, {animate:true});
+    // setView is a no-op (no 'moveend' fires) if we're already centered
+    // there, so make sure the popup still opens in that case.
+    setTimeout(openIt, 350);
+  }
+
+  document.getElementById('sort-added').addEventListener('click', () => {
+    addressListSort = 'added';
+    document.getElementById('sort-added').classList.add('active');
+    document.getElementById('sort-alpha').classList.remove('active');
+    document.getElementById('sort-route').classList.remove('active');
+    renderAddressList();
+  });
+  document.getElementById('sort-alpha').addEventListener('click', () => {
+    addressListSort = 'alpha';
+    document.getElementById('sort-alpha').classList.add('active');
+    document.getElementById('sort-added').classList.remove('active');
+    document.getElementById('sort-route').classList.remove('active');
+    renderAddressList();
+  });
+  document.getElementById('sort-route').addEventListener('click', () => {
+    addressListSort = 'route';
+    document.getElementById('sort-route').classList.add('active');
+    document.getElementById('sort-added').classList.remove('active');
+    document.getElementById('sort-alpha').classList.remove('active');
+    renderAddressList();
+  });
+
+  const filterBtnIds = {all:'filter-all', visited:'filter-visited', unvisited:'filter-unvisited'};
+  Object.entries(filterBtnIds).forEach(([key, id]) => {
+    document.getElementById(id).addEventListener('click', () => {
+      addressListFilter = key;
+      Object.values(filterBtnIds).forEach(bid => document.getElementById(bid).classList.remove('active'));
+      document.getElementById(id).classList.add('active');
+      renderAddressList();
+    });
+  });
+
+  function updateStats(){
+    const plotted = addresses.filter(a => !a.error && a.lat != null);
+    const visited = plotted.filter(a => a.visited);
+    document.getElementById('stat-total').textContent = plotted.length;
+    document.getElementById('stat-visited').textContent = visited.length;
+    document.getElementById('stat-remaining').textContent = plotted.length - visited.length;
+    renderAddressList();
+  }
+
+  function fitToPins(){
+    const plotted = addresses.filter(a => !a.error && a.lat != null);
+    const points = plotted.map(a => [a.lat, a.lon]);
+
+    if(currentPos && Number.isFinite(currentPos.lat) && Number.isFinite(currentPos.lon)) {
+      points.push([currentPos.lat, currentPos.lon]);
+    }
+
+    if(points.length === 0) return;
+    const bounds = L.latLngBounds(points);
+    map.fitBounds(bounds, {padding:[30,30]});
+  }
+
+  // ---------- Geocoding ----------
+  // Primary: US Census Bureau geocoder — uses official TIGER/Line address-range
+  // data, so it covers small-town/rural streets that OpenStreetMap often lacks.
+  // Backup 1: OpenStreetMap/Nominatim, in case an address is outside the US
+  // or the Census service is briefly unavailable.
+  // Backup 2: Photon (built on a different OSM search index than Nominatim) —
+  // occasionally matches addresses phrased in a way Nominatim's parser misses.
+  function sleep(ms){ return new Promise(r => setTimeout(r, ms)); }
+
+  // The Census geocoder has no CORS headers, so a browser calling it directly
+  // gets silently blocked even though the data is there (curl works fine).
+  // When this page is served by server.py, /api/census proxies the request
+  // same-origin, sidestepping CORS. If that proxy route isn't present (e.g.
+  // hosted as a plain static file on GitHub Pages/Netlify), fall back to the
+  // direct call, which will still fail in most browsers but costs nothing.
+  async function geocodeCensus(query){
+    const directUrl = 'https://geocoding.geo.census.gov/geocoder/locations/onelineaddress?benchmark=Public_AR_Current&format=json&address=' + encodeURIComponent(query);
+    const proxyUrl = '/api/census?address=' + encodeURIComponent(query);
+    let res;
+    try{
+      res = await fetch(proxyUrl);
+      if(!res.ok) throw new Error('proxy failed');
+    }catch(e){
+      res = await fetch(directUrl);
+      if(!res.ok) throw new Error('census geocode failed');
+    }
+    const data = await res.json();
+    const matches = data && data.result && data.result.addressMatches;
+    if(!matches || matches.length === 0) throw new Error('census: not found');
+    const c = matches[0].coordinates;
+    return {lat: c.y, lon: c.x};
+  }
+
+  async function geocodeNominatim(query){
+    const url = 'https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=' + encodeURIComponent(query);
+    const res = await fetch(url, {headers: {'Accept':'application/json'}});
+    if(!res.ok) throw new Error('nominatim geocode failed');
+    const data = await res.json();
+    if(!data || data.length === 0) throw new Error('nominatim: not found');
+    return {lat: parseFloat(data[0].lat), lon: parseFloat(data[0].lon)};
+  }
+
+  async function geocodePhoton(query){
+    const url = 'https://photon.komoot.io/api/?limit=1&q=' + encodeURIComponent(query);
+    const res = await fetch(url);
+    if(!res.ok) throw new Error('photon geocode failed');
+    const data = await res.json();
+    const feat = data && data.features && data.features[0];
+    if(!feat) throw new Error('photon: not found');
+    const [lon, lat] = feat.geometry.coordinates;
+    return {lat, lon};
+  }
+
+  async function geocodeOne(query){
+    try{
+      return {...(await geocodeCensus(query)), source: 'Census'};
+    }catch(e){}
+    try{
+      return {...(await geocodeNominatim(query)), source: 'OpenStreetMap'};
+    }catch(e){}
+    return {...(await geocodePhoton(query)), source: 'Photon'};
+  }
+
+  function extractAddressVariations(rawAddr){
+    // Parse address to generate multiple search variations
+    const variations = [rawAddr]; // Try full address first
+
+    const parts = rawAddr.split(',').map(p => p.trim());
+
+    // Extract street address: look for a digit at the start of a part
+    const streetPartIdx = parts.findIndex(p => /^\d/.test(p));
+
+    if(streetPartIdx > 0){
+      // If there's a description before the street, try without it
+      const withoutDesc = parts.slice(streetPartIdx).join(', ');
+      if(withoutDesc !== rawAddr) variations.push(withoutDesc);
+    }
+
+    // Try just street + last part (city, state, zip)
+    if(parts.length >= 3){
+      const lastPart = parts[parts.length - 1];
+      const secondLastPart = parts[parts.length - 2];
+      if(streetPartIdx >= 0){
+        const streetAddr = parts[streetPartIdx];
+        variations.push(`${streetAddr}, ${secondLastPart}, ${lastPart}`);
+      }
+    }
+
+    // Try just city, state, zip (for approximate search)
+    if(parts.length >= 2){
+      variations.push(parts.slice(-2).join(', '));
+    }
+
+    return variations;
+  }
+
+  async function retryGeocodeAddress(rawAddr){
+    const status = document.getElementById('manual-status');
+    if(status) status.textContent = `Retrying "${rawAddr}"...`;
+
+    const variations = extractAddressVariations(rawAddr);
+
+    for(let i = 0; i < variations.length; i++){
+      try{
+        const query = variations[i];
+        const result = await geocodeOne(query);
+        const entry = addresses.find(a => a.raw === rawAddr && a.error);
+        if(entry){
+          entry.lat = result.lat;
+          entry.lon = result.lon;
+          entry.source = result.source;
+          entry.error = false;
+          await saveAddresses();
+          renderPins();
+          updateStats();
+          lastFailedList = lastFailedList.filter(a => a !== rawAddr);
+          renderFailedList(lastFailedList);
+          const usedQuery = i > 0 ? ` (searched as: "${query}")` : '';
+          if(status) status.textContent = `Success! "${rawAddr}" found via ${result.source}${usedQuery}.`;
+          fitToPins();
+          return;
+        }
+      }catch(e){
+        // Try next variation
+      }
+    }
+
+    if(status) status.textContent = `Still couldn't find "${rawAddr}" — try zooming to area or placing manually.`;
+  }
+
+  async function zoomToApproximateLocation(rawAddr){
+    const status = document.getElementById('manual-status');
+    if(status) status.textContent = `Searching for approximate location of "${rawAddr}"...`;
+
+    // Try to extract city and state from the address
+    const parts = rawAddr.split(',').map(p => p.trim());
+    let approxQuery = '';
+
+    if(parts.length >= 2){
+      approxQuery = parts.slice(-2).join(', '); // city, state
+    } else if(parts.length === 1){
+      approxQuery = rawAddr;
+    }
+
+    try{
+      const result = await geocodeOne(approxQuery);
+      map.setView([result.lat, result.lon], 14, {animate:true});
+      if(status) status.textContent = `Zoomed to approximate location (${result.source}). Now you can manually place the pin.`;
+    }catch(e){
+      if(status) status.textContent = `Couldn't find even an approximate location. Try typing just the city and state.`;
+    }
+  }
+
+  let cancelAddRequested = false;
+
+  async function addAddresses(){
+    const raw = document.getElementById('addr-input').value;
+    const lines = raw.split('\n').map(s => s.trim()).filter(Boolean);
+    if(lines.length === 0) return;
+
+    const btnAdd = document.getElementById('btn-add');
+    btnAdd.disabled = true;
+    const wrap = document.getElementById('progress-wrap');
+    const fill = document.getElementById('progress-fill');
+    const label = document.getElementById('progress-label');
+    wrap.style.display = 'block';
+    const failedBox = document.getElementById('failed-list');
+    failedBox.textContent = '';
+    lastFailedList = [];
+    const failed = lastFailedList;
+    cancelAddRequested = false;
+
+    // avoid duplicate entries
+    const existingRaw = new Set(addresses.map(a => a.raw.toLowerCase()));
+    const newLines = lines.filter(l => !existingRaw.has(l.toLowerCase()));
+
+    // Recalculate roughly every 10% of the batch so you see progress fill in as it goes
+    const checkpointEvery = Math.max(1, Math.ceil(newLines.length / 10));
+
+    let processedCount = 0;
+    let wasCancelled = false;
+    let successfulAddresses = []; // Track newly added addresses
+
+    for(let i=0; i<newLines.length; i++){
+      if(cancelAddRequested){ wasCancelled = true; break; }
+
+      const line = newLines[i];
+      const succeededSoFar = processedCount - failed.length;
+      label.textContent = `Geocoding ${i+1} of ${newLines.length} — ${succeededSoFar} found, ${failed.length} failed so far: ${line}`;
+      fill.style.width = Math.round(((i)/newLines.length)*100) + '%';
+      const entry = {id: 'a_' + Date.now() + '_' + i, raw: line, lat:null, lon:null, visited:false, error:false};
+      try{
+        const {lat, lon, source} = await geocodeOne(line);
+        entry.lat = lat; entry.lon = lon; entry.source = source;
+        successfulAddresses.push(entry); // Track successful addresses
+      }catch(e){
+        entry.error = true;
+        failed.push(line);
+        renderFailedList(failed);
+      }
+      addresses.push(entry);
+      processedCount++;
+      renderPins();
+      updateStats();
+      const isCheckpoint = ((i + 1) % checkpointEvery === 0) || (i === newLines.length - 1);
+      if(isCheckpoint && newLines.length > 1) fitToPins(); // Only fit all if more than 1 address
+      if(i < newLines.length - 1) await sleep(250); // Census has no strict rate limit; small pause is just politeness. Nominatim fallback calls are already spaced out by this loop being sequential.
+    }
+
+    if(wasCancelled){
+      await saveAddresses();
+      fill.style.width = Math.round((processedCount/newLines.length)*100) + '%';
+      label.textContent = `Cancelled — kept ${processedCount - failed.length} of ${processedCount} processed before stopping (${newLines.length - processedCount} addresses left un-added; paste them again anytime).`;
+      btnAdd.disabled = false;
+      cancelAddRequested = false;
+      return;
+    }
+
+    fill.style.width = '100%';
+    label.textContent = `Done — geocoded ${newLines.length - failed.length} of ${newLines.length}.`;
+    renderFailedList(failed);
+    await saveAddresses();
+
+    // If only 1 address was successfully added, zoom to it; otherwise fit all pins
+    if(successfulAddresses.length === 1){
+      const addr = successfulAddresses[0];
+      map.setView([addr.lat, addr.lon], 18, {animate:true});
+    } else if(successfulAddresses.length > 1){
+      fitToPins();
+    }
+
+    document.getElementById('addr-input').value = '';
+    btnAdd.disabled = false;
+    setTimeout(() => { wrap.style.display = 'none'; }, 4000);
+  }
+
+  // ---------- Geolocation ----------
+  function haversine(lat1, lon1, lat2, lon2){
+    const R = 3958.8; // miles
+    const dLat = (lat2-lat1) * Math.PI/180;
+    const dLon = (lon2-lon1) * Math.PI/180;
+    const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  function startTracking(){
+    if(!navigator.geolocation){
+      document.getElementById('geo-status').textContent = 'Geolocation is not available in this browser — use "Set location by tapping map" instead.';
+      return;
+    }
+
+    if(geoWatchId !== null){
+      navigator.geolocation.clearWatch(geoWatchId);
+      geoWatchId = null;
+    }
+
+    manualMode = false;
+    map.getContainer().style.cursor = '';
+    document.getElementById('geo-status').textContent = 'Requesting location permission...';
+    geoWatchId = navigator.geolocation.watchPosition(pos => {
+      currentPos = {lat: pos.coords.latitude, lon: pos.coords.longitude};
+      currentPosSource = 'gps';
+      document.getElementById('geo-status').textContent =
+        `Tracking — accuracy ±${Math.round(pos.coords.accuracy)}m`;
+      placeMeMarker(currentPos.lat, currentPos.lon);
+      fitToPins();
+    }, err => {
+      let msg = 'Location permission denied or unavailable.';
+      if(err && err.code === 1) msg = "Location blocked for this page. If you're inside Claude's chat window, GPS usually can't be granted there — use \"Set location by tapping map\" below instead.";
+      else if(err && err.code === 2) msg = 'Position unavailable right now — try again, or use "Set location by tapping map".';
+      else if(err && err.code === 3) msg = 'Location request timed out — try again, or use "Set location by tapping map".';
+      document.getElementById('geo-status').textContent = msg;
+      if(geoWatchId !== null){
+        navigator.geolocation.clearWatch(geoWatchId);
+        geoWatchId = null;
+      }
+    }, {enableHighAccuracy:true, maximumAge:5000, timeout:15000});
+  }
+
+  function placeMeMarker(lat, lon){
+    if(!meMarker){
+      meMarker = L.circleMarker([lat, lon], {
+        radius:8, color:'#2A2117', weight:2, fillColor:'#2E86FF', fillOpacity:1
+      }).addTo(map).bindPopup('You are here');
+    } else {
+      meMarker.setLatLng([lat, lon]);
+    }
+    // Once we have a location fix (GPS or manual), the "center on me" button becomes useful.
+    document.getElementById('btn-center-location').style.display = 'block';
+  }
+
+  document.getElementById('btn-center-location').addEventListener('click', () => {
+    if(currentPos) map.setView([currentPos.lat, currentPos.lon], 17, {animate:true});
+  });
+
+  let manualMode = false;
+  function enableManualLocation(){
+    if(geoWatchId !== null){
+      navigator.geolocation.clearWatch(geoWatchId);
+      geoWatchId = null;
+    }
+    manualMode = true;
+    document.getElementById('geo-status').textContent = 'Tap anywhere on the map to set your location.';
+    map.getContainer().style.cursor = 'crosshair';
+  }
+
+  // ---------- Manual placement for addresses that failed all 3 geocoders ----------
+  let pendingManualAddress = null;
+
+  function renderFailedList(failedArr){
+    const failedBox = document.getElementById('failed-list');
+    if(!failedArr || failedArr.length === 0){ failedBox.innerHTML = ''; return; }
+    failedBox.innerHTML = '';
+    const heading = document.createElement('div');
+    heading.style.marginBottom = '6px';
+    heading.textContent = `${failedArr.length} couldn't be auto-located by any of the 3 lookup services. Place them yourself:`;
+    failedBox.appendChild(heading);
+    failedArr.forEach(addr => {
+      const row = document.createElement('div');
+      row.style.cssText = 'display:flex;justify-content:space-between;align-items:center;gap:6px;padding:5px 0;border-bottom:1px dashed var(--line);flex-wrap:wrap;';
+      const span = document.createElement('span');
+      span.textContent = addr;
+      span.style.cssText = 'flex:1;min-width:150px;cursor:pointer;text-decoration:underline;';
+      span.title = 'Click to zoom to approximate location';
+      span.onclick = () => zoomToApproximateLocation(addr);
+
+      const btnContainer = document.createElement('div');
+      btnContainer.style.cssText = 'display:flex;gap:4px;flex-shrink:0;';
+
+      const btnRetry = document.createElement('button');
+      btnRetry.textContent = 'Try again';
+      btnRetry.className = 'popup-btn';
+      btnRetry.style.cssText = 'background:var(--tag-amber);color:#fff;padding:4px 8px;font-size:11px;';
+      btnRetry.onclick = () => retryGeocodeAddress(addr);
+
+      const btn = document.createElement('button');
+      btn.textContent = 'Place on map';
+      btn.className = 'popup-btn';
+      btn.style.cssText = 'background:var(--tag-green);color:#fff;padding:4px 8px;font-size:11px;';
+      btn.onclick = () => requestManualPlacement(addr);
+
+      btnContainer.appendChild(btnRetry);
+      btnContainer.appendChild(btn);
+      row.appendChild(span);
+      row.appendChild(btnContainer);
+      failedBox.appendChild(row);
+    });
+    const status = document.createElement('div');
+    status.id = 'manual-status';
+    status.style.cssText = 'margin-top:8px;color:var(--tag-green-dark);font-style:italic;';
+    failedBox.appendChild(status);
+  }
+
+  function requestManualPlacement(addr){
+    pendingManualAddress = addr;
+    const status = document.getElementById('manual-status');
+    if(status) status.textContent = `Tap anywhere on the map to place: "${addr}"`;
+    map.getContainer().style.cursor = 'crosshair';
+  }
+
+  map.on('click', (e) => {
+    if(pendingManualAddress){
+      const addr = pendingManualAddress;
+      let entry = addresses.find(a => a.raw === addr && a.error);
+      if(entry){
+        entry.lat = e.latlng.lat; entry.lon = e.latlng.lng; entry.error = false; entry.source = 'Manual';
+      } else {
+        addresses.push({id: 'a_manual_' + Date.now(), raw: addr, lat: e.latlng.lat, lon: e.latlng.lng, visited:false, error:false, source:'Manual'});
+      }
+      saveAddresses();
+      renderPins();
+      updateStats();
+      lastFailedList = lastFailedList.filter(a => a !== addr);
+      renderFailedList(lastFailedList);
+      pendingManualAddress = null;
+      map.getContainer().style.cursor = '';
+      return;
+    }
+    if(!manualMode) return;
+    const hasVisibleRoute = !!routeLine || document.getElementById('route-list').children.length > 0 || document.getElementById('gmaps-row').style.display !== 'none';
+    if(hasVisibleRoute){
+      window.pendingLocationUpdate = {lat: e.latlng.lat, lon: e.latlng.lng};
+      const yesBtn = document.getElementById('btn-confirm-yes');
+      if(yesBtn) yesBtn.textContent = 'Clear route';
+      document.getElementById('confirm-message').textContent = 'Clear current route and update start location?';
+      document.getElementById('confirm-modal-overlay').classList.add('visible');
+      document.getElementById('confirm-modal').classList.add('visible');
+      window.history.pushState({modal: 'confirm'}, '');
+      return;
+    }
+    currentPos = {lat: e.latlng.lat, lon: e.latlng.lng};
+    currentPosSource = 'manual';
+    saveManualLocation(currentPos);
+    placeMeMarker(currentPos.lat, currentPos.lon);
+    fitToPins();
+    document.getElementById('geo-status').textContent = 'Manual location set — tap "Set location by tapping map" again to move it.';
+    manualMode = false;
+    map.getContainer().style.cursor = '';
+  });
+
+  // ---------- Add a pin via right-click (desktop) or long-press (mobile) ----------
+  // Leaflet fires 'contextmenu' for both a real right-click and a touch
+  // long-press, so one handler covers desktop and mobile.
+  let pendingPinLatLng = null;
+
+  map.on('contextmenu', (e) => {
+    L.DomEvent.preventDefault(e.originalEvent);
+    pendingPinLatLng = e.latlng;
+    const input = document.getElementById('add-pin-input');
+    input.value = '';
+    document.getElementById('add-pin-modal-overlay').classList.add('visible');
+    document.getElementById('add-pin-modal').classList.add('visible');
+    window.history.pushState({modal: 'add-pin'}, '');
+    setTimeout(() => input.focus(), 50);
+  });
+
+  function closeAddPinModal(){
+    document.getElementById('add-pin-modal-overlay').classList.remove('visible');
+    document.getElementById('add-pin-modal').classList.remove('visible');
+    pendingPinLatLng = null;
+  }
+
+  async function confirmAddPin(){
+    if(!pendingPinLatLng) return;
+    const desc = document.getElementById('add-pin-input').value.trim();
+    const latlng = pendingPinLatLng;
+    closeAddPinModal();
+    addresses.push({
+      id: 'a_manual_' + Date.now(),
+      raw: desc || 'Custom pin',
+      lat: latlng.lat,
+      lon: latlng.lng,
+      visited: false,
+      error: false,
+      source: 'Manual'
+    });
+    await saveAddresses();
+    renderPins();
+    updateStats();
+    renderAddressList();
+  }
+
+  document.getElementById('btn-add-pin-confirm').addEventListener('click', confirmAddPin);
+  document.getElementById('btn-add-pin-cancel').addEventListener('click', closeAddPinModal);
+  document.getElementById('add-pin-modal-overlay').addEventListener('click', closeAddPinModal);
+  document.getElementById('add-pin-input').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){ e.preventDefault(); confirmAddPin(); }
+  });
+
+  // ---------- Edit pin modal ----------
+  async function confirmEditPin(){
+    if(!window.addressToEdit) return;
+    const newText = document.getElementById('edit-pin-input').value.trim();
+    if(newText){
+      window.addressToEdit.raw = newText;
+      await saveAddresses();
+      // Close the popup before re-rendering pins so the old popup doesn't stick around
+      map.closePopup();
+      renderPins();
+      renderAddressList();
+    }
+    document.getElementById('edit-pin-modal-overlay').classList.remove('visible');
+    document.getElementById('edit-pin-modal').classList.remove('visible');
+    window.addressToEdit = null;
+  }
+
+  // Duplicates the pin at the same location under a new label, so a place you
+  // pass twice in one trip can hold two positions in the route.
+  async function copyEditPin(){
+    if(!window.addressToEdit) return;
+    const src = window.addressToEdit;
+    const newText = document.getElementById('edit-pin-input').value.trim();
+    // Nudge the copy a few metres so the two markers don't sit exactly on top
+    // of each other (the lower one would be unclickable). Far too small to
+    // matter for routing — well under the accuracy of the geocode itself.
+    const OFFSET = 0.00005; // ~5.5 m
+    addresses.push({
+      id: 'a_copy_' + Date.now(),
+      raw: newText && newText !== src.raw ? newText : `${src.raw} (2)`,
+      lat: src.lat + OFFSET,
+      lon: src.lon + OFFSET,
+      visited: false,
+      error: false,
+      source: src.source || 'Manual'
+    });
+    await saveAddresses();
+    map.closePopup();
+    renderPins();
+    updateStats();
+    renderAddressList();
+    closeEditPinModal();
+  }
+
+  function closeEditPinModal(){
+    document.getElementById('edit-pin-modal-overlay').classList.remove('visible');
+    document.getElementById('edit-pin-modal').classList.remove('visible');
+    window.addressToEdit = null;
+  }
+
+  document.getElementById('btn-edit-pin-copy').addEventListener('click', copyEditPin);
+  document.getElementById('btn-edit-pin-confirm').addEventListener('click', confirmEditPin);
+  document.getElementById('btn-edit-pin-cancel').addEventListener('click', closeEditPinModal);
+  document.getElementById('edit-pin-modal-overlay').addEventListener('click', closeEditPinModal);
+  document.getElementById('edit-pin-input').addEventListener('keydown', (e) => {
+    if(e.key === 'Enter'){ e.preventDefault(); confirmEditPin(); }
+    if(e.key === 'Escape'){ e.preventDefault(); closeEditPinModal(); }
+  });
+
+  // ---------- Nearest-N routing ----------
+  const ALGO_HINTS = {
+    nearest: 'Picks the closest stops one-by-one — fast, usually close to optimal.',
+    optimal: 'Calculates the exact shortest order across the chosen stops — instant even at 15.',
+    twoopt: 'Starts from the nearest-neighbor route, then untangles any crossed-over legs to shorten the total distance.',
+    manual: 'Drag the ⠿ handles to set your own order. Seeds from the last route you built, so optimize first and then tweak. The route button only redraws — it never re-sorts your stops.'
+  };
+  document.getElementById('algo-select').addEventListener('change', (e) => {
+    document.getElementById('algo-hint').textContent = ALGO_HINTS[e.target.value] || '';
+    settings.routeAlgo = e.target.value;
+    updateRouteButtonLabel();
+    saveSettings();
+    if(document.getElementById('route-list').children.length > 0 && currentPos) buildRoute();
+  });
+  document.getElementById('stops-select').addEventListener('change', (e) => {
+    updateRouteButtonLabel();
+    settings.routeStopCount = e.target.value;
+    saveSettings();
+    if(document.getElementById('route-list').children.length > 0 && currentPos) buildRoute();
+  });
+  document.getElementById('return-start-checkbox').addEventListener('change', (e) => {
+    settings.routeReturnToStart = e.target.checked;
+    saveSettings();
+    if(document.getElementById('route-list').children.length > 0 && currentPos) buildRoute();
+  });
+
+  function updateRouteButtonLabel(){
+    const n = document.getElementById('stops-select').value;
+    const algo = document.getElementById('algo-select').value;
+    // Manual mode only ever redraws from the saved order -- it never re-sorts
+    // the stops -- so "Find nearest N" would promise something it doesn't do.
+    document.getElementById('btn-route').textContent = algo === 'manual'
+      ? 'Redraw route (keeps my order)'
+      : `Find nearest ${n} & route`;
+  }
+
+  function totalRouteDistance(start, stops, includeReturnToStart = false, distFn = null){
+    let total = 0, from = start;
+    stops.forEach(s => {
+      total += distFn ? distFn(from, s) : haversine(from.lat, from.lon, s.lat, s.lon);
+      from = s;
+    });
+    if(includeReturnToStart && stops.length) total += distFn ? distFn(from, start) : haversine(from.lat, from.lon, start.lat, start.lon);
+    return total;
+  }
+
+  // Greedy nearest-neighbor chain, capped at `capacity` stops
+  function nearestNeighborChain(start, pool, capacity, distFn = null){
+    const remaining = pool.slice();
+    const chain = [];
+    let from = start;
+    while(remaining.length && chain.length < capacity){
+      let bestIdx = 0, bestDist = Infinity;
+      remaining.forEach((p, idx) => {
+        const d = distFn ? distFn(from, p) : haversine(from.lat, from.lon, p.lat, p.lon);
+        if(d < bestDist){ bestDist = d; bestIdx = idx; }
+      });
+      const chosen = remaining.splice(bestIdx, 1)[0];
+      chain.push(chosen);
+      from = chosen;
+    }
+    return chain;
+  }
+
+  // Exact optimal order among the `capacity` nearest candidates via Held-Karp
+  // dynamic programming (O(2^n * n^2)) -- instant up to ~15-20 stops, unlike
+  // brute-force permutations (n!) which would choke well before then.
+  function optimalChain(start, pool, capacity, includeReturnToStart = false, distFn = null){
+    const candidates = pool.slice()
+      .sort((a,b) => {
+        const da = distFn ? distFn(start,a) : haversine(start.lat,start.lon,a.lat,a.lon);
+        const db = distFn ? distFn(start,b) : haversine(start.lat,start.lon,b.lat,b.lon);
+        return da - db;
+      })
+      .slice(0, capacity);
+    const n = candidates.length;
+    if(n <= 1) return candidates;
+
+    const dist = Array.from({length:n}, () => new Array(n).fill(0));
+    for(let i=0; i<n; i++){
+      for(let j=0; j<n; j++){
+        if(i !== j) dist[i][j] = distFn ? distFn(candidates[i], candidates[j]) : haversine(candidates[i].lat, candidates[i].lon, candidates[j].lat, candidates[j].lon);
+      }
+    }
+    const distFromStart = candidates.map(c => distFn ? distFn(start, c) : haversine(start.lat, start.lon, c.lat, c.lon));
+    const distToStart = candidates.map(c => distFn ? distFn(c, start) : haversine(c.lat, c.lon, start.lat, start.lon));
+
+    const numMasks = 1 << n;
+    const dp = Array.from({length:numMasks}, () => new Array(n).fill(Infinity));
+    const parent = Array.from({length:numMasks}, () => new Array(n).fill(-1));
+    for(let j=0; j<n; j++) dp[1<<j][j] = distFromStart[j];
+
+    for(let mask=1; mask<numMasks; mask++){
+      for(let j=0; j<n; j++){
+        if(!(mask & (1<<j))) continue;
+        const cur = dp[mask][j];
+        if(cur === Infinity) continue;
+        for(let k=0; k<n; k++){
+          if(mask & (1<<k)) continue;
+          const nextMask = mask | (1<<k);
+          const candDist = cur + dist[j][k];
+          if(candDist < dp[nextMask][k]){
+            dp[nextMask][k] = candDist;
+            parent[nextMask][k] = j;
+          }
+        }
+      }
+    }
+
+    const fullMask = numMasks - 1;
+    let bestJ = 0, bestCost = Infinity;
+    for(let j=0; j<n; j++){
+      const totalCost = includeReturnToStart ? dp[fullMask][j] + distToStart[j] : dp[fullMask][j];
+      if(totalCost < bestCost){ bestCost = totalCost; bestJ = j; }
+    }
+
+    const order = [];
+    let mask = fullMask, j = bestJ;
+    while(j !== -1){
+      order.push(j);
+      const pj = parent[mask][j];
+      mask ^= (1<<j);
+      j = pj;
+    }
+    order.reverse();
+    return order.map(idx => candidates[idx]);
+  }
+
+  // Nearest-neighbor chain, then local 2-opt swaps to remove crossed/inefficient legs
+  function twoOptChain(start, pool, capacity, includeReturnToStart = false, distFn = null){
+    let route = nearestNeighborChain(start, pool, capacity, distFn);
+    let improved = true;
+    while(improved){
+      improved = false;
+      for(let i=0; i<route.length-1; i++){
+        for(let j=i+1; j<route.length; j++){
+          const candidate = route.slice(0,i).concat(route.slice(i,j+1).reverse(), route.slice(j+1));
+          if(totalRouteDistance(start, candidate, includeReturnToStart, distFn) < totalRouteDistance(start, route, includeReturnToStart, distFn) - 1e-9){
+            route = candidate;
+            improved = true;
+          }
+        }
+      }
+    }
+    return route;
+  }
+
+  // Re-running buildRoute for a reorder or a return-to-start toggle asks for
+  // the exact same matrix. Caching the last one keeps those interactions free
+  // instead of spending an API call each time.
+  let roadMatrixCache = null; // {key, matrix}
+  const ROAD_REQUEST_LOG_KEY = 'garage-sale-road-request-log';
+
+  function readRoadRequestLog(){
+    try{
+      const stored = JSON.parse(readStorageValue(ROAD_REQUEST_LOG_KEY) || '[]');
+      return Array.isArray(stored) ? stored.filter(time => Number.isFinite(time)) : [];
+    }catch(e){
+      return [];
+    }
+  }
+
+  // Counts requests to whichever provider is active. Not split per-provider --
+  // the point is noticing "am I hammering this service," not full accounting.
+  function renderRoadRequestMeter(){
+    const meter = document.getElementById('road-request-meter');
+    const provider = settings.routingProvider;
+    const hasKey = provider === 'ors' ? !!(settings.orsApiKey && settings.orsApiKey.trim())
+      : provider === 'mapquest' ? !!(settings.mapquestApiKey && settings.mapquestApiKey.trim())
+      : false;
+    if(!hasKey){
+      meter.style.display = 'none';
+      return;
+    }
+    const now = Date.now();
+    const hourAgo = now - 60 * 60 * 1000;
+    const requests = readRoadRequestLog().filter(time => time >= hourAgo);
+    writeStorageValue(ROAD_REQUEST_LOG_KEY, JSON.stringify(requests));
+    const pastMinute = requests.filter(time => time >= now - 60 * 1000).length;
+    const providerName = provider === 'mapquest' ? 'MapQuest' : 'ORS';
+    meter.textContent = `${providerName} requests: ${pastMinute} past minute · ${requests.length} past hour`;
+    meter.style.display = 'block';
+  }
+
+  function recordRoadRequest(){
+    const requests = readRoadRequestLog();
+    requests.push(Date.now());
+    writeStorageValue(ROAD_REQUEST_LOG_KEY, JSON.stringify(requests));
+    renderRoadRequestMeter();
+  }
+
+  // The provider is part of the cache key -- an ORS-derived matrix must never
+  // satisfy a MapQuest lookup (or vice versa) just because the coordinates
+  // happen to match.
+  function roadMatrixKey(provider, locations, profile){
+    return provider + '|' + profile + '|' + locations.map(p => `${p.lat},${p.lon}`).join(';');
+  }
+
+  async function fetchORSMatrix(locations, profile, apiKey){
+    if(!apiKey || !apiKey.trim() || locations.length < 2) return {matrix:null, failure:'configuration'};
+    const body = {
+      locations: locations.map(p => [p.lon, p.lat]),
+      metrics: ['distance', 'duration'],
+      units: 'mi'
+    };
+    let res;
+    try{
+      recordRoadRequest();
+      res = await fetch(`/api/ors/matrix/${profile}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, application/geo+json'
+        },
+        body: JSON.stringify(body)
+      });
+    }catch(e){
+      console.warn('ORS matrix network error:', e);
+      return {matrix:null, failure:'network'};
+    }
+    if(!res.ok){
+      const errText = await res.text().catch(() => '');
+      console.warn(`ORS matrix HTTP ${res.status}:`, errText);
+      if(res.status === 429 || /quota exceeded|rate limit/i.test(errText)) return {matrix:null, failure:'quota'};
+      if(res.status === 401 || res.status === 403) return {matrix:null, failure:'authentication'};
+      return {matrix:null, failure:'service'};
+    }
+    try{
+      const data = await res.json();
+      return {matrix:{distances: data.distances, durations: data.durations}, failure:null};
+    }catch(e){
+      console.warn('ORS matrix parse error:', e);
+      return {matrix:null, failure:'service'};
+    }
+  }
+
+  // MapQuest's Route Matrix (POST /directions/v2/routematrix): the key goes
+  // in the query string (not a header like ORS), locations are {latLng}
+  // objects, and allToAll:true is what makes it return the full NxN grid the
+  // TSP algorithms need rather than just origin-to-each-destination. unit:'m'
+  // is miles; time comes back in seconds already, matching ORS's durations.
+  async function fetchMapQuestMatrix(locations, routeType, apiKey){
+    if(!apiKey || !apiKey.trim() || locations.length < 2) return {matrix:null, failure:'configuration'};
+    const body = {
+      locations: locations.map(p => ({latLng: {lat: p.lat, lng: p.lon}})),
+      options: {allToAll: true, unit: 'm', routeType}
+    };
+    let res;
+    try{
+      recordRoadRequest();
+      res = await fetch(`/api/mapquest/routematrix?key=${encodeURIComponent(apiKey.trim())}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify(body)
+      });
+    }catch(e){
+      console.warn('MapQuest matrix network error:', e);
+      return {matrix:null, failure:'network'};
+    }
+    if(res.status === 401 || res.status === 403){
+      const errText = await res.text().catch(() => '');
+      console.warn(`MapQuest matrix HTTP ${res.status}:`, errText);
+      return {matrix:null, failure: res.status === 403 ? 'quota' : 'authentication'};
+    }
+    if(!res.ok){
+      console.warn(`MapQuest matrix HTTP ${res.status}`);
+      return {matrix:null, failure:'service'};
+    }
+    try{
+      const data = await res.json();
+      // MapQuest reports errors as HTTP 200 with a non-zero info.statuscode.
+      if(data.info && data.info.statuscode && data.info.statuscode !== 0){
+        console.warn('MapQuest matrix statuscode', data.info.statuscode, data.info.messages);
+        return {matrix:null, failure:'service'};
+      }
+      if(!Array.isArray(data.distance) || !Array.isArray(data.distance[0])){
+        return {matrix:null, failure:'service'};
+      }
+      // Seconds -> already what durFn expects; distance is already miles (unit:'m').
+      return {matrix:{distances: data.distance, durations: data.time}, failure:null};
+    }catch(e){
+      console.warn('MapQuest matrix parse error:', e);
+      return {matrix:null, failure:'service'};
+    }
+  }
+
+  // Dispatches to whichever provider is active, but always returns the same
+  // {matrix:{distances,durations}|null, failure} shape -- buildRoute() never
+  // needs to know which service actually answered. Reads the module-level
+  // `settings` directly (like the other fetch* functions read their args),
+  // rather than taking it as a parameter that would shadow that variable.
+  async function fetchRoadMatrix(locations){
+    if(settings.routingProvider === 'mapquest'){
+      const routeType = settings.mapquestRouteType || DEFAULT_SETTINGS.mapquestRouteType;
+      return fetchMapQuestMatrix(locations, routeType, settings.mapquestApiKey);
+    }
+    const profile = settings.orsProfile || DEFAULT_SETTINGS.orsProfile;
+    return fetchORSMatrix(locations, profile, settings.orsApiKey);
+  }
+
+  // Flattens a GeoJSON LineString or MultiLineString into one continuous
+  // [[lat,lng], ...] run (concatenating segments end-to-end), and flips ORS's
+  // [lon,lat] coordinate order to Leaflet's [lat,lng]. Normalizing here means
+  // buildRoute() can draw either provider's road geometry with a single plain
+  // L.polyline() instead of needing a GeoJSON-aware layer.
+  function flattenORSGeometry(geom){
+    if(!geom || !geom.coordinates) return null;
+    const segments = geom.type === 'MultiLineString' ? geom.coordinates : [geom.coordinates];
+    const latlngs = segments.flat().map(([lon, lat]) => [lat, lon]);
+    return latlngs.length ? latlngs : null;
+  }
+
+  async function fetchORSDirections(points, profile, apiKey){
+    if(!apiKey || points.length < 2) return null;
+    const body = {
+      coordinates: points.map(p => [p.lon, p.lat]),
+      instructions: false
+    };
+    let res;
+    try{
+      recordRoadRequest();
+      res = await fetch(`/api/ors/directions/${profile}`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey.trim()}`,
+          'Content-Type': 'application/json',
+          'Accept': 'application/json, application/geo+json'
+        },
+        body: JSON.stringify(body)
+      });
+    }catch(e){
+      console.warn('ORS directions network error:', e);
+      return null;
+    }
+    if(!res.ok){
+      console.warn(`ORS directions HTTP ${res.status}`);
+      return null;
+    }
+    try{
+      const data = await res.json();
+      return flattenORSGeometry(data.features?.[0]?.geometry);
+    }catch(e){
+      console.warn('ORS directions parse error:', e);
+      return null;
+    }
+  }
+
+  // MapQuest's Route endpoint (POST /directions/v2/route) accepts more than
+  // two locations as ordered waypoints in one call, and with
+  // shapeFormat:'raw' returns route.shape.shapePoints as a flat
+  // [lat,lng,lat,lng,...] array -- already Leaflet's coordinate order, just
+  // needing to be chunked into pairs.
+  async function fetchMapQuestDirections(points, routeType, apiKey){
+    if(!apiKey || points.length < 2) return null;
+    const body = {
+      locations: points.map(p => ({latLng: {lat: p.lat, lng: p.lon}})),
+      options: {routeType, unit: 'm', shapeFormat: 'raw', generalize: 0, doReverseGeocode: false}
+    };
+    let res;
+    try{
+      recordRoadRequest();
+      res = await fetch(`/api/mapquest/route?key=${encodeURIComponent(apiKey.trim())}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify(body)
+      });
+    }catch(e){
+      console.warn('MapQuest directions network error:', e);
+      return null;
+    }
+    if(!res.ok){
+      console.warn(`MapQuest directions HTTP ${res.status}`);
+      return null;
+    }
+    try{
+      const data = await res.json();
+      if(data.info && data.info.statuscode && data.info.statuscode !== 0){
+        console.warn('MapQuest directions statuscode', data.info.statuscode, data.info.messages);
+        return null;
+      }
+      const flat = data.route?.shape?.shapePoints;
+      if(!Array.isArray(flat) || flat.length < 4) return null;
+      const latlngs = [];
+      for(let i = 0; i < flat.length - 1; i += 2) latlngs.push([flat[i], flat[i+1]]);
+      return latlngs;
+    }catch(e){
+      console.warn('MapQuest directions parse error:', e);
+      return null;
+    }
+  }
+
+  // Dispatches to whichever provider is active; both branches already return
+  // the same normalized [[lat,lng], ...] shape.
+  async function fetchRoadGeometryLatLngs(points){
+    if(settings.routingProvider === 'mapquest'){
+      const routeType = settings.mapquestRouteType || DEFAULT_SETTINGS.mapquestRouteType;
+      return fetchMapQuestDirections(points, routeType, settings.mapquestApiKey);
+    }
+    const profile = settings.orsProfile || DEFAULT_SETTINGS.orsProfile;
+    return fetchORSDirections(points, profile, settings.orsApiKey);
+  }
+
+  // ---------- Drag-to-reorder (Manual order mode) ----------
+  // Pointer events rather than HTML5 drag-and-drop: the latter doesn't fire on
+  // touch, and the rest of the app (box-select, panel resizer) already uses
+  // this pattern.
+  let dragRow = null;
+
+  function startRowDrag(e, li){
+    e.preventDefault();
+    e.stopPropagation();
+    dragRow = li;
+    li.classList.add('dragging');
+    // Listen on document, not the handle: onRowDragMove reparents `li` via
+    // insertBefore on every move to show the live reorder, and insertBefore
+    // on a node that already has a parent does an implicit remove-then-
+    // reinsert -- which silently releases pointer capture set on a child of
+    // that node. With capture gone, a later pointerup only reaches a
+    // handle-scoped listener if the pointer happens to still be physically
+    // over the handle's new position, which it usually isn't -- so the drag
+    // looked like it never dropped. document-level listeners don't have
+    // this problem since document itself is never removed from the DOM.
+    document.addEventListener('pointermove', onRowDragMove);
+    document.addEventListener('pointerup', endRowDrag);
+    document.addEventListener('pointercancel', endRowDrag);
+  }
+
+  function onRowDragMove(e){
+    if(!dragRow) return;
+    const listEl = document.getElementById('route-list');
+    const rows = [...listEl.querySelectorAll('li')]
+      .filter(r => r !== dragRow && r.dataset.stopId !== 'return-start');
+    // Insert above the first row whose midpoint sits below the pointer.
+    const after = rows.find(r => {
+      const box = r.getBoundingClientRect();
+      return e.clientY < box.top + box.height / 2;
+    });
+    if(after){
+      listEl.insertBefore(dragRow, after);
+    } else {
+      const ret = listEl.querySelector('li[data-stop-id="return-start"]');
+      if(ret) listEl.insertBefore(dragRow, ret); else listEl.appendChild(dragRow);
+    }
+  }
+
+  async function endRowDrag(e){
+    if(!dragRow) return;
+    document.removeEventListener('pointermove', onRowDragMove);
+    document.removeEventListener('pointerup', endRowDrag);
+    document.removeEventListener('pointercancel', endRowDrag);
+    dragRow.classList.remove('dragging');
+    dragRow = null;
+    const ids = [...document.getElementById('route-list').querySelectorAll('li')]
+      .map(r => r.dataset.stopId)
+      .filter(id => id && id !== 'return-start');
+    saveManualOrder(ids);
+    // Cached matrix means this recomputes legs, totals, map line and the
+    // Google Maps link without spending another API call.
+    await buildRoute();
+  }
+
+  async function buildRoute(){
+    const listEl = document.getElementById('route-list');
+    const emptyEl = document.getElementById('route-empty');
+    const gmapsRow = document.getElementById('gmaps-row');
+    const orsStatusEl = document.getElementById('ors-status');
+    const routeBtn = document.getElementById('btn-route');
+    listEl.innerHTML = '';
+    routeStopNumbers = new Map();
+    // Any early return below means there's no route, so the heading total
+    // from a previous run would be stale — clear it up front.
+    document.getElementById('route-summary').style.display = 'none';
+
+    if(!currentPos){
+      emptyEl.textContent = 'Track your location first, then tap the button above.';
+      emptyEl.style.display = 'block';
+      gmapsRow.style.display = 'none';
+      if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+      renderPins();
+      return;
+    }
+
+    const unvisited = addresses.filter(a => !a.error && a.lat != null && !a.visited);
+    if(unvisited.length === 0){
+      emptyEl.textContent = 'No unvisited pins left — nice work!';
+      emptyEl.style.display = 'block';
+      gmapsRow.style.display = 'none';
+      if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+      renderPins();
+      return;
+    }
+
+    // ---------- Road-distance matrix (ORS or MapQuest, whichever is active) ----------
+    // distFn = miles between two stops, durFn = seconds. Both come from the
+    // same single matrix call, so having travel time costs no extra requests.
+    let distFn = null, durFn = null;
+    const provider = settings.routingProvider;
+    const providerLabel = provider === 'mapquest' ? 'MapQuest' : 'ORS';
+    const providerApiKey = provider === 'mapquest' ? settings.mapquestApiKey : settings.orsApiKey;
+    if(provider !== 'none' && providerApiKey && providerApiKey.trim()){
+      // MapQuest's all-to-all matrix tops out at 25 locations; ORS's at 50.
+      const MAX_LOCATIONS = provider === 'mapquest' ? 25 : 50;
+      let matrixStops = unvisited;
+      if(unvisited.length + 1 > MAX_LOCATIONS){
+        matrixStops = unvisited.slice()
+          .sort((a,b) => haversine(currentPos.lat,currentPos.lon,a.lat,a.lon) - haversine(currentPos.lat,currentPos.lon,b.lat,b.lon))
+          .slice(0, MAX_LOCATIONS - 1);
+      }
+      const locations = [currentPos, ...matrixStops];
+
+      const modeValue = provider === 'mapquest'
+        ? (settings.mapquestRouteType || DEFAULT_SETTINGS.mapquestRouteType)
+        : (settings.orsProfile || DEFAULT_SETTINGS.orsProfile);
+      const cacheKey = roadMatrixKey(provider, locations, modeValue);
+      let matrix;
+      let matrixFailure = null;
+      if(roadMatrixCache && roadMatrixCache.key === cacheKey){
+        matrix = roadMatrixCache.matrix;
+      } else {
+        orsStatusEl.textContent = `Fetching road distances from ${providerLabel}…`;
+        orsStatusEl.style.color = '#8a7e6a';
+        orsStatusEl.style.display = 'block';
+        routeBtn.disabled = true;
+        const matrixResult = await fetchRoadMatrix(locations);
+        matrix = matrixResult.matrix;
+        matrixFailure = matrixResult.failure;
+        routeBtn.disabled = false;
+        roadMatrixCache = matrix ? {key: cacheKey, matrix} : null;
+      }
+
+      if(matrix){
+        orsStatusEl.textContent = `Using ${providerLabel} road distances`;
+        orsStatusEl.style.color = 'var(--tag-green)';
+        const idxMap = new Map();
+        locations.forEach((p, i) => idxMap.set(`${p.lat},${p.lon}`, i));
+        // Both providers leave null/missing entries for pairs with no
+        // connecting route (an unbridged island, say). `fallback` keeps
+        // those from poisoning the DP table with NaN — an estimate is
+        // better than a broken route.
+        const lookup = (table, fallback) => (a, b) => {
+          const ai = idxMap.get(`${a.lat},${a.lon}`);
+          const bi = idxMap.get(`${b.lat},${b.lon}`);
+          if(ai === undefined || bi === undefined) return fallback(a, b);
+          const v = table[ai]?.[bi];
+          return (v === null || v === undefined || !Number.isFinite(v)) ? fallback(a, b) : v;
+        };
+        const crowMiles = (a, b) => haversine(a.lat, a.lon, b.lat, b.lon);
+        distFn = lookup(matrix.distances, crowMiles);
+        // Unreachable pairs get a rough 12 mph estimate so the units stay seconds.
+        if(matrix.durations) durFn = lookup(matrix.durations, (a, b) => crowMiles(a, b) / 12 * 3600);
+      } else {
+        if(matrixFailure === 'quota'){
+          orsStatusEl.textContent = `${providerLabel} quota reached — using straight-line`;
+        } else if(matrixFailure === 'authentication'){
+          orsStatusEl.textContent = `${providerLabel} key rejected — using straight-line`;
+        } else if(matrixFailure === 'network'){
+          orsStatusEl.textContent = `${providerLabel} unavailable offline — using straight-line`;
+        } else {
+          orsStatusEl.textContent = 'Road distances unavailable — using straight-line';
+        }
+        orsStatusEl.style.color = 'var(--sale-red)';
+      }
+    } else {
+      orsStatusEl.style.display = 'none';
+    }
+
+    const algo = document.getElementById('algo-select').value;
+    const stopCount = parseInt(document.getElementById('stops-select').value, 10) || 5;
+    const includeReturn = document.getElementById('return-start-checkbox').checked;
+
+    const isManual = algo === 'manual';
+    let ordered;
+    if(isManual){
+      ordered = resolveManualOrder(unvisited, stopCount);
+      // First time into manual mode there's nothing saved, so seed from the
+      // cheap greedy route rather than dumping stops in list order.
+      if(loadManualOrder().length === 0 && ordered.length > 0){
+        ordered = nearestNeighborChain(currentPos, unvisited, stopCount, distFn);
+        saveManualOrder(ordered.map(s => s.id));
+      }
+    } else if(algo === 'optimal'){
+      ordered = optimalChain(currentPos, unvisited, stopCount, includeReturn, distFn);
+    } else if(algo === 'twoopt'){
+      ordered = twoOptChain(currentPos, unvisited, stopCount, includeReturn, distFn);
+    } else {
+      ordered = nearestNeighborChain(currentPos, unvisited, stopCount, distFn);
+    }
+
+    ordered.forEach((stop, idx) => {
+      routeStopNumbers.set(stop.id, idx + 1);
+    });
+    renderAddressList();
+
+    const useRoadDist = settings.routingProvider !== 'none' && distFn !== null;
+    let from = currentPos;
+    const chain = ordered.map(stop => {
+      const legMiles = distFn ? distFn(from, stop) : haversine(from.lat, from.lon, stop.lat, stop.lon);
+      const legSecs = durFn ? durFn(from, stop) : null;
+      from = stop;
+      return {...stop, legMiles, legSecs};
+    });
+
+    emptyEl.style.display = 'none';
+    const displayItems = [...chain];
+    if(includeReturn && chain.length > 0){
+      const returnLegMiles = distFn ? distFn(from, currentPos) : haversine(from.lat, from.lon, currentPos.lat, currentPos.lon);
+      const returnLegSecs = durFn ? durFn(from, currentPos) : null;
+      displayItems.push({id:'return-start', raw:'Return to start', legMiles:returnLegMiles, legSecs:returnLegSecs, lat: currentPos.lat, lon: currentPos.lon});
+    }
+
+    // ---------- Heading summary: total distance + travel time ----------
+    const summaryEl = document.getElementById('route-summary');
+    const totalMiles = displayItems.reduce((sum, s) => sum + s.legMiles, 0);
+    const parts = [`${totalMiles.toFixed(1)} mi`];
+    if(durFn) parts.push(formatDuration(displayItems.reduce((sum, s) => sum + (s.legSecs || 0), 0)));
+    if(!useRoadDist) parts.push('straight-line');
+    summaryEl.textContent = ` — ${parts.join(' · ')}`;
+    summaryEl.style.display = 'inline';
+
+    displayItems.forEach((stop, i) => {
+      const li = document.createElement('li');
+      li.style.cursor = 'pointer';
+      li.dataset.stopId = stop.id;
+      li.addEventListener('click', () => {
+        if(stop.id === 'return-start'){
+          map.setView([currentPos.lat, currentPos.lon], 17, {animate:true});
+          return;
+        }
+        map.setView([stop.lat, stop.lon], 18, {animate:true});
+        const marker = markerById[stop.id];
+        if(marker) marker.openPopup();
+      });
+      // The return-to-start row is derived, not a real stop, so it can't be
+      // dragged — it always belongs last.
+      if(isManual && stop.id !== 'return-start'){
+        const handle = document.createElement('span');
+        handle.className = 'drag-handle';
+        handle.textContent = '⠿';
+        handle.title = 'Drag to reorder';
+        handle.addEventListener('click', (e) => e.stopPropagation());
+        handle.addEventListener('pointerdown', (e) => startRowDrag(e, li));
+        li.appendChild(handle);
+      }
+      const addr = document.createElement('span');
+      addr.className = 'addr';
+      addr.textContent = `${i+1}. ${stop.raw}`;
+      const dist = document.createElement('span');
+      dist.className = 'dist';
+      dist.textContent = stop.legMiles.toFixed(1) + (useRoadDist ? ' road mi' : ' mi');
+      li.appendChild(addr); li.appendChild(dist);
+      listEl.appendChild(li);
+    });
+
+    // ---------- Draw route line ----------
+    if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+
+    const mainLatLngs = [[currentPos.lat, currentPos.lon], ...chain.map(s => [s.lat, s.lon])];
+    const fullLatLngs = [...mainLatLngs];
+    if(includeReturn && chain.length > 0) fullLatLngs.push([currentPos.lat, currentPos.lon]);
+
+    let routeDrawn = false;
+    if(settings.routingProvider !== 'none' && settings.roadGeometry && distFn && providerApiKey){
+      const geomPoints = [currentPos, ...ordered];
+      if(includeReturn && ordered.length > 0) geomPoints.push(currentPos);
+      const latlngs = await fetchRoadGeometryLatLngs(geomPoints);
+      if(latlngs){
+        routeLine = L.polyline(latlngs, {color:'#2E86FF', weight:3, opacity:0.85}).addTo(map);
+        map.fitBounds(L.latLngBounds(latlngs), {padding:[40,40]});
+        routeDrawn = true;
+      }
+    }
+
+    if(!routeDrawn){
+      if(includeReturn && chain.length > 0){
+        const mainRoute = L.polyline(mainLatLngs, {color:'#2E86FF', weight:3, dashArray:'6,6'}).addTo(map);
+        const returnRoute = L.polyline([fullLatLngs[fullLatLngs.length-2], fullLatLngs[fullLatLngs.length-1]], {
+          color:'#8A8A8A', weight:3, dashArray:'6,6', opacity:0.95
+        }).addTo(map);
+        routeLine = L.layerGroup([mainRoute, returnRoute]);
+        routeLine.addTo(map);
+      } else {
+        routeLine = L.polyline(mainLatLngs, {color:'#2E86FF', weight:3, dashArray:'6,6'}).addTo(map);
+      }
+      map.fitBounds(L.latLngBounds(fullLatLngs), {padding:[40,40]});
+    }
+    renderPins();
+
+    const origin = `${currentPos.lat},${currentPos.lon}`;
+    const destination = includeReturn ? origin : `${chain[chain.length-1].lat},${chain[chain.length-1].lon}`;
+    const waypoints = chain.map(s => `${s.lat},${s.lon}`).join('|');
+    const travelMode = settings.googleMapsTravelMode || DEFAULT_SETTINGS.googleMapsTravelMode;
+    const avoidSettings = [];
+    if(settings.avoidHighways) avoidSettings.push('highways');
+    if(settings.avoidTolls) avoidSettings.push('tolls');
+    if(settings.avoidFerries) avoidSettings.push('ferries');
+    let gUrl = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${destination}&travelmode=${travelMode}`;
+    if(waypoints) gUrl += `&waypoints=${encodeURIComponent(waypoints)}`;
+    if(avoidSettings.length > 0) gUrl += `&avoid=${avoidSettings.join('|')}`;
+    document.getElementById('gmaps-link').href = gUrl;
+    document.getElementById('gmaps-link').textContent = `Open in Google Maps (${travelMode})`;
+    gmapsRow.style.display = 'block';
+  }
+
+  // ---------- Reset ----------
+  function requestResetAll(){
+    const count = addresses.length;
+    document.getElementById('confirm-message').textContent = count > 0
+      ? `Erase all ${count} saved address${count===1?'':'es'}, every pin on the map, and all visited/not-visited status? This is permanent and cannot be undone.`
+      : `Erase all saved data on this device? This is permanent and cannot be undone.`;
+    document.getElementById('confirm-modal-overlay').classList.add('visible');
+    document.getElementById('confirm-modal').classList.add('visible');
+    window.history.pushState({modal: 'confirm'}, '');
+    window.resetAllRequested = true;
+  }
+
+  async function resetAll(){
+    addresses = [];
+    lastFailedList = [];
+    try{ localStorage.removeItem(MANUAL_ORDER_KEY); }catch(e){}
+    try{ localStorage.removeItem(MANUAL_LOCATION_KEY); }catch(e){}
+    roadMatrixCache = null;
+    await saveAddresses();
+    renderPins();
+    renderFailedList(lastFailedList);
+    updateStats();
+    document.getElementById('route-list').innerHTML = '';
+    document.getElementById('route-empty').style.display = 'block';
+    document.getElementById('route-empty').textContent = 'No route yet — track your location, then tap the button above.';
+    document.getElementById('gmaps-row').style.display = 'none';
+    document.getElementById('route-summary').style.display = 'none';
+    if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+  }
+
+  // ---------- Tabs ----------
+  document.querySelectorAll('#tab-bar .tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('#tab-bar .tab-btn').forEach(b => b.classList.remove('active'));
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+    });
+  });
+
+  // ---------- Panel collapse ----------
+  document.getElementById('btn-toggle-panel').addEventListener('click', () => {
+    const panel = document.getElementById('panel');
+    const btn = document.getElementById('btn-toggle-panel');
+    const collapsed = panel.classList.toggle('collapsed');
+    btn.textContent = collapsed ? 'Show panel' : 'Hide panel';
+    btn.title = collapsed ? 'Show the sidebar' : 'Hide the sidebar to see more map';
+    setTimeout(() => map.invalidateSize(), 200);
+  });
+
+  // ---------- Help modal ----------
+  function openHelpModal(){
+    document.getElementById('help-modal-overlay').classList.add('visible');
+    document.getElementById('help-modal').classList.add('visible');
+    window.history.pushState({modal: 'help'}, '');
+  }
+  function closeHelpModal(){
+    document.getElementById('help-modal-overlay').classList.remove('visible');
+    document.getElementById('help-modal').classList.remove('visible');
+  }
+  document.getElementById('help-button').addEventListener('click', openHelpModal);
+  document.getElementById('help-modal-close').addEventListener('click', closeHelpModal);
+  document.getElementById('help-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'help-modal-overlay') closeHelpModal();
+  });
+
+  // ---------- Settings modal ----------
+  function openSettingsModal(){
+    document.getElementById('settings-modal-overlay').classList.add('visible');
+    document.getElementById('settings-modal').classList.add('visible');
+    window.history.pushState({modal: 'settings'}, '');
+  }
+  function closeSettingsModal(){
+    document.getElementById('settings-modal-overlay').classList.remove('visible');
+    document.getElementById('settings-modal').classList.remove('visible');
+  }
+  document.getElementById('settings-button').addEventListener('click', openSettingsModal);
+  document.getElementById('settings-modal-close').addEventListener('click', closeSettingsModal);
+  document.getElementById('settings-modal-overlay').addEventListener('click', (e) => {
+    if(e.target.id === 'settings-modal-overlay') closeSettingsModal();
+  });
+  document.getElementById('btn-saved-lists').addEventListener('click', openSavedListsModal);
+  document.getElementById('saved-lists-modal-close').addEventListener('click', closeSavedListsModal);
+  document.getElementById('saved-lists-modal-overlay').addEventListener('click', closeSavedListsModal);
+  document.getElementById('btn-copy-addresses').addEventListener('click', copyCurrentAddresses);
+  document.getElementById('btn-copy-visible').addEventListener('click', copyVisibleAddressList);
+  document.getElementById('saved-lists-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const nameInput = document.getElementById('saved-list-name');
+    const name = nameInput.value.trim();
+    if(!name || addresses.length === 0) return;
+    const lists = await loadSavedLists();
+    lists.unshift({
+      id: `list_${Date.now()}`,
+      name,
+      savedAt: new Date().toISOString(),
+      ...buildSavedListPayload()
+    });
+    await saveSavedLists(lists);
+    nameInput.value = '';
+    await renderSavedLists();
+  });
+  document.getElementById('saved-lists').addEventListener('click', async (e) => {
+    const restoreButton = e.target.closest('[data-restore-list]');
+    const overwriteButton = e.target.closest('[data-overwrite-list]');
+    const deleteButton = e.target.closest('[data-delete-list]');
+    if(restoreButton){
+      await restoreSavedList(restoreButton.dataset.restoreList);
+      return;
+    }
+    if(overwriteButton){
+      if(addresses.length === 0){
+        document.getElementById('copy-addresses-status').textContent = 'Add some addresses before overwriting a saved list.';
+        return;
+      }
+      const list = (await loadSavedLists()).find(item => item.id === overwriteButton.dataset.overwriteList);
+      if(!list) return;
+      const had = Array.isArray(list.addresses) ? list.addresses.length : 0;
+      askConfirm(
+        `Replace "${list.name}" with the ${addresses.length} address${addresses.length === 1 ? '' : 'es'} currently loaded? Its saved ${had} address${had === 1 ? '' : 'es'} will be discarded.`,
+        'Yes, Overwrite',
+        () => { window.pendingOverwriteListId = list.id; }
+      );
+      return;
+    }
+    if(deleteButton){
+      const list = (await loadSavedLists()).find(item => item.id === deleteButton.dataset.deleteList);
+      if(!list) return;
+      askConfirm(
+        `Delete the saved list "${list.name}"? This can't be undone.`,
+        'Yes, Delete',
+        () => { window.pendingDeleteListId = list.id; }
+      );
+    }
+  });
+  document.getElementById('travel-mode-select').addEventListener('change', (e) => {
+    settings.googleMapsTravelMode = e.target.value;
+    saveSettings();
+    if(document.getElementById('route-list').children.length > 0 && currentPos){
+      buildRoute();
+    }
+  });
+
+  // Explicit id->settings-key map, not a derived string transform -- the old
+  // transform turned 'avoid-highways' into settings.highways (dropping the
+  // "avoid" entirely), silently writing to a key nobody ever read. That meant
+  // these three checkboxes never actually affected a route or persisted,
+  // despite looking and behaving like normal checkboxes in every other way.
+  const AVOID_SETTING_KEYS = {
+    'avoid-highways': 'avoidHighways',
+    'avoid-tolls': 'avoidTolls',
+    'avoid-ferries': 'avoidFerries'
+  };
+  Object.entries(AVOID_SETTING_KEYS).forEach(([id, settingKey]) => {
+    const input = document.getElementById(id);
+    if(!input) return;
+    input.addEventListener('change', (e) => {
+      settings[settingKey] = e.target.checked;
+      saveSettings();
+      if(document.getElementById('route-list').children.length > 0 && currentPos){
+        buildRoute();
+      }
+    });
+  });
+
+  // Road-routing provider listeners (ORS and/or MapQuest)
+  function rerouteIfRoadRoutingActive(){
+    if(settings.routingProvider !== 'none' && document.getElementById('route-list').children.length > 0 && currentPos) buildRoute();
+  }
+
+  document.getElementById('routing-provider-select').addEventListener('change', (e) => {
+    settings.routingProvider = e.target.value;
+    syncProfileUI();
+    renderRoadRequestMeter();
+    saveSettings();
+    // Switching providers always changes what a route would look like
+    // (including switching to/from straight-line), so reroute unconditionally
+    // rather than only when the new provider is active.
+    if(document.getElementById('route-list').children.length > 0 && currentPos) buildRoute();
+  });
+
+  // Each provider's travel-mode picker appears in two places — the Ride tab
+  // (for quick changes mid-planning) and the Settings modal. Both pairs write
+  // the same setting, so this keeps all four showing the same value.
+  document.getElementById('ride-profile-select').addEventListener('change', (e) => {
+    settings.orsProfile = e.target.value;
+    syncProfileUI();
+    saveSettings();
+    rerouteIfRoadRoutingActive();
+  });
+  document.getElementById('ors-profile-select').addEventListener('change', (e) => {
+    settings.orsProfile = e.target.value;
+    syncProfileUI();
+    saveSettings();
+    rerouteIfRoadRoutingActive();
+  });
+  document.getElementById('ride-mapquest-select').addEventListener('change', (e) => {
+    settings.mapquestRouteType = e.target.value;
+    syncProfileUI();
+    saveSettings();
+    rerouteIfRoadRoutingActive();
+  });
+  document.getElementById('mapquest-route-type-select').addEventListener('change', (e) => {
+    settings.mapquestRouteType = e.target.value;
+    syncProfileUI();
+    saveSettings();
+    rerouteIfRoadRoutingActive();
+  });
+
+  document.getElementById('ors-key-toggle').addEventListener('click', () => {
+    const input = document.getElementById('ors-api-key');
+    const btn = document.getElementById('ors-key-toggle');
+    if(input.type === 'password'){ input.type = 'text'; btn.textContent = 'Hide'; }
+    else { input.type = 'password'; btn.textContent = 'Show'; }
+  });
+  document.getElementById('ors-api-key').addEventListener('blur', () => {
+    settings.orsApiKey = document.getElementById('ors-api-key').value.trim();
+    saveSettings();
+    renderRoadRequestMeter();
+    rerouteIfRoadRoutingActive();
+  });
+
+  document.getElementById('mapquest-key-toggle').addEventListener('click', () => {
+    const input = document.getElementById('mapquest-api-key');
+    const btn = document.getElementById('mapquest-key-toggle');
+    if(input.type === 'password'){ input.type = 'text'; btn.textContent = 'Hide'; }
+    else { input.type = 'password'; btn.textContent = 'Show'; }
+  });
+  document.getElementById('mapquest-api-key').addEventListener('blur', () => {
+    settings.mapquestApiKey = document.getElementById('mapquest-api-key').value.trim();
+    saveSettings();
+    renderRoadRequestMeter();
+    rerouteIfRoadRoutingActive();
+  });
+
+  document.getElementById('road-geometry').addEventListener('change', (e) => {
+    settings.roadGeometry = e.target.checked;
+    saveSettings();
+    rerouteIfRoadRoutingActive();
+  });
+
+  // ---------- Changelog modal ----------
+  document.getElementById('version-stamp').addEventListener('click', async () => {
+    try {
+      const res = await fetch('/CHANGELOG.md');
+      if(!res.ok) throw new Error('failed to load changelog');
+      const text = await res.text();
+      document.getElementById('changelog-content').innerHTML = marked.parse(text);
+      document.getElementById('changelog-modal').classList.add('visible');
+      window.history.pushState({modal: 'changelog'}, '');
+    } catch(e) {
+      alert('Could not load changelog: ' + e.message);
+    }
+  });
+  document.getElementById('changelog-close').addEventListener('click', () => {
+    document.getElementById('changelog-modal').classList.remove('visible');
+  });
+  document.getElementById('changelog-modal').addEventListener('click', (e) => {
+    if(e.target.id === 'changelog-modal') {
+      document.getElementById('changelog-modal').classList.remove('visible');
+    }
+  });
+
+  // ---------- Map toolbar ----------
+  const layerMenu = document.getElementById('layer-menu');
+  document.getElementById('btn-layers').addEventListener('click', () => {
+    layerMenu.classList.toggle('visible');
+  });
+  document.querySelectorAll('.layer-option').forEach(btn => {
+    btn.addEventListener('click', () => {
+      applyMapLayer(btn.dataset.layer);
+      layerMenu.classList.remove('visible');
+    });
+  });
+  document.addEventListener('click', (e) => {
+    if(!e.target.closest('#btn-layers') && !e.target.closest('#layer-menu')) {
+      layerMenu.classList.remove('visible');
+    }
+  });
+  document.getElementById('btn-zoom-all').addEventListener('click', fitToPins);
+
+  let drawSelectMode = false;
+  let selectRect = null;
+  const selectStart = {x:0, y:0};
+
+  document.getElementById('btn-draw-select').addEventListener('click', () => {
+    drawSelectMode = !drawSelectMode;
+    document.getElementById('btn-draw-select').classList.toggle('active', drawSelectMode);
+    if(drawSelectMode){
+      map.getContainer().style.cursor = 'crosshair';
+      // Stops both Leaflet's own pan and the browser's default touch-scroll
+      // from stealing the drag gesture on mobile.
+      map.getContainer().style.touchAction = 'none';
+      map.dragging.disable();
+    } else {
+      map.getContainer().style.cursor = '';
+      map.getContainer().style.touchAction = '';
+      map.dragging.enable();
+      if(selectRect) map.removeLayer(selectRect);
+      selectRect = null;
+    }
+  });
+
+  const mapContainer = map.getContainer();
+
+  // Pointer Events unify mouse, touch, and pen — a plain mousedown/mousemove/
+  // mouseup trio (the previous implementation) never fires for touch input,
+  // which is why "Select box" didn't work on phones/tablets at all.
+  mapContainer.addEventListener('pointerdown', (e) => {
+    if(!drawSelectMode) return;
+    mapContainer.setPointerCapture(e.pointerId);
+    selectStart.x = e.clientX;
+    selectStart.y = e.clientY;
+    const rect = mapContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    selectStart.latlng = map.containerPointToLatLng([x, y]);
+    e.preventDefault();
+  });
+
+  mapContainer.addEventListener('pointermove', (e) => {
+    if(!drawSelectMode || !selectStart.latlng) return;
+    if(selectRect) map.removeLayer(selectRect);
+    const rect = mapContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const endLatlng = map.containerPointToLatLng([x, y]);
+    const bounds = L.latLngBounds([selectStart.latlng, endLatlng]);
+    selectRect = L.rectangle(bounds, {color:'#C8412C', weight:2, fill:true, fillColor:'#C8412C', fillOpacity:0.1}).addTo(map);
+  });
+
+  function finishBoxSelect(e){
+    if(!drawSelectMode || !selectStart.latlng) return;
+    const rect = mapContainer.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    const endLatlng = map.containerPointToLatLng([x, y]);
+    const bounds = L.latLngBounds([selectStart.latlng, endLatlng]);
+    selectStart.latlng = null;
+
+    const within = [];
+    addresses.forEach(a => {
+      if(a.error || a.lat == null) return;
+      const latlng = L.latLng(a.lat, a.lon);
+      if(bounds.contains(latlng)) within.push(a);
+    });
+
+    drawSelectMode = false;
+    document.getElementById('btn-draw-select').classList.remove('active');
+    map.dragging.enable();
+    map.getContainer().style.cursor = '';
+    map.getContainer().style.touchAction = '';
+    if(selectRect) map.removeLayer(selectRect);
+    selectRect = null;
+
+    if(within.length === 0){
+      const status = document.getElementById('manual-status');
+      if(status){ status.textContent = ''; }
+      const label = document.getElementById('progress-label');
+      // Reuse the toolbar itself for a quick, non-blocking heads-up instead
+      // of alert() (unreliable/silently swallowed in some mobile & PWA
+      // contexts).
+      const btn = document.getElementById('btn-draw-select');
+      const original = btn.textContent;
+      btn.textContent = 'No pins in box';
+      setTimeout(() => { btn.textContent = original; }, 1500);
+      return;
+    }
+
+    // Show selection modal
+    window.selectedPins = within;
+    document.getElementById('selection-count').textContent = `${within.length} pins selected. What would you like to do?`;
+    document.getElementById('selection-modal-overlay').classList.add('visible');
+    document.getElementById('selection-modal').classList.add('visible');
+    window.history.pushState({modal: 'selection'}, '');
+  }
+
+  mapContainer.addEventListener('pointerup', finishBoxSelect);
+  mapContainer.addEventListener('pointercancel', () => {
+    selectStart.latlng = null;
+    if(selectRect) map.removeLayer(selectRect);
+    selectRect = null;
+  });
+
+  // Selection modal handlers
+  document.getElementById('btn-mark-visited').addEventListener('click', () => {
+    if(!window.selectedPins) return;
+    window.selectedPins.forEach(a => {
+      a.visited = true;
+    });
+    saveAddresses();
+    renderPins();
+    updateStats();
+    document.getElementById('selection-modal-overlay').classList.remove('visible');
+    document.getElementById('selection-modal').classList.remove('visible');
+  });
+
+  document.getElementById('btn-mark-unvisited').addEventListener('click', () => {
+    if(!window.selectedPins) return;
+    window.selectedPins.forEach(a => {
+      a.visited = false;
+    });
+    saveAddresses();
+    renderPins();
+    updateStats();
+    document.getElementById('selection-modal-overlay').classList.remove('visible');
+    document.getElementById('selection-modal').classList.remove('visible');
+  });
+
+  document.getElementById('btn-remove-selected').addEventListener('click', () => {
+    if(!window.selectedPins || window.selectedPins.length === 0) return;
+    // Show confirm modal for removal
+    document.getElementById('confirm-message').textContent = `Remove ${window.selectedPins.length} selected pin${window.selectedPins.length > 1 ? 's' : ''}?`;
+    document.getElementById('confirm-modal-overlay').classList.add('visible');
+    document.getElementById('confirm-modal').classList.add('visible');
+    window.history.pushState({modal: 'confirm'}, '');
+    // Mark that we're removing multiple pins
+    window.removeMultiplePins = true;
+    // Close selection modal
+    document.getElementById('selection-modal-overlay').classList.remove('visible');
+    document.getElementById('selection-modal').classList.remove('visible');
+  });
+
+  document.getElementById('selection-modal-overlay').addEventListener('click', () => {
+    document.getElementById('selection-modal-overlay').classList.remove('visible');
+    document.getElementById('selection-modal').classList.remove('visible');
+  });
+
+  // Cancel button for selection modal
+  document.getElementById('btn-selection-cancel').addEventListener('click', () => {
+    document.getElementById('selection-modal-overlay').classList.remove('visible');
+    document.getElementById('selection-modal').classList.remove('visible');
+  });
+
+  // Confirm modal handlers
+  document.getElementById('btn-confirm-yes').addEventListener('click', async () => {
+    if(window.pendingOverwriteListId){
+      const id = window.pendingOverwriteListId;
+      window.pendingOverwriteListId = null;
+      const lists = await loadSavedLists();
+      const target = lists.find(item => item.id === id);
+      if(target){
+        Object.assign(target, buildSavedListPayload(), {savedAt: new Date().toISOString()});
+        await saveSavedLists(lists);
+        await renderSavedLists();
+        document.getElementById('copy-addresses-status').textContent = `"${target.name}" overwritten.`;
+      }
+      document.getElementById('btn-confirm-yes').textContent = 'Yes, Remove';
+      document.getElementById('confirm-modal-overlay').classList.remove('visible');
+      document.getElementById('confirm-modal').classList.remove('visible');
+      return;
+    }
+    if(window.pendingDeleteListId){
+      const id = window.pendingDeleteListId;
+      window.pendingDeleteListId = null;
+      const lists = await loadSavedLists();
+      const gone = lists.find(item => item.id === id);
+      await saveSavedLists(lists.filter(item => item.id !== id));
+      await renderSavedLists();
+      if(gone) document.getElementById('copy-addresses-status').textContent = `"${gone.name}" deleted.`;
+      document.getElementById('btn-confirm-yes').textContent = 'Yes, Remove';
+      document.getElementById('confirm-modal-overlay').classList.remove('visible');
+      document.getElementById('confirm-modal').classList.remove('visible');
+      return;
+    }
+    if(window.pendingLocationUpdate){
+      const newPos = window.pendingLocationUpdate;
+      window.pendingLocationUpdate = null;
+      currentPos = newPos;
+      currentPosSource = 'manual';
+      saveManualLocation(currentPos);
+      placeMeMarker(currentPos.lat, currentPos.lon);
+      if(routeLine){ map.removeLayer(routeLine); routeLine = null; }
+      document.getElementById('route-list').innerHTML = '';
+      document.getElementById('route-empty').style.display = 'block';
+      document.getElementById('route-empty').textContent = 'Route cleared — pick a new route from the updated start location.';
+      document.getElementById('gmaps-row').style.display = 'none';
+      fitToPins();
+      document.getElementById('geo-status').textContent = 'Location updated — route cleared and ready to rebuild.';
+      manualMode = false;
+      map.getContainer().style.cursor = '';
+      document.getElementById('btn-confirm-yes').textContent = 'Yes, Remove';
+      document.getElementById('confirm-modal-overlay').classList.remove('visible');
+      document.getElementById('confirm-modal').classList.remove('visible');
+      return;
+    }
+    if(window.resetAllRequested){
+      window.resetAllRequested = false;
+      await resetAll();
+      document.getElementById('confirm-modal-overlay').classList.remove('visible');
+      document.getElementById('confirm-modal').classList.remove('visible');
+      document.getElementById('btn-confirm-yes').textContent = 'Yes, Remove';
+      return;
+    }
+    if(window.removeMultiplePins && window.selectedPins){
+      // Remove multiple selected pins
+      const idsToRemove = new Set(window.selectedPins.map(p => p.id));
+      addresses = addresses.filter(x => !idsToRemove.has(x.id));
+      window.removeMultiplePins = false;
+      window.selectedPins = null;
+    } else if(window.addressToRemove){
+      // Remove single pin
+      addresses = addresses.filter(x => x.id !== window.addressToRemove.id);
+      window.addressToRemove = null;
+    }
+
+    if(addresses.length > 0 || window.removeMultiplePins){
+      await saveAddresses();
+      renderPins();
+      updateStats();
+      map.closePopup();
+    }
+
+    document.getElementById('confirm-modal-overlay').classList.remove('visible');
+    document.getElementById('confirm-modal').classList.remove('visible');
+    document.getElementById('btn-confirm-yes').textContent = 'Yes, Remove';
+  });
+
+  document.getElementById('btn-confirm-no').addEventListener('click', () => {
+    document.getElementById('confirm-modal-overlay').classList.remove('visible');
+    document.getElementById('confirm-modal').classList.remove('visible');
+    window.addressToRemove = null;
+    window.removeMultiplePins = false;
+    window.selectedPins = null;
+    window.resetAllRequested = false;
+    window.pendingLocationUpdate = null;
+    window.pendingOverwriteListId = null;
+    window.pendingDeleteListId = null;
+    document.getElementById('btn-confirm-yes').textContent = 'Yes, Remove';
+  });
+
+  document.getElementById('confirm-modal-overlay').addEventListener('click', () => {
+    document.getElementById('confirm-modal-overlay').classList.remove('visible');
+    document.getElementById('confirm-modal').classList.remove('visible');
+    window.addressToRemove = null;
+    window.removeMultiplePins = false;
+    window.selectedPins = null;
+    window.resetAllRequested = false;
+    window.pendingLocationUpdate = null;
+    window.pendingOverwriteListId = null;
+    window.pendingDeleteListId = null;
+    document.getElementById('btn-confirm-yes').textContent = 'Yes, Remove';
+  });
+
+  // Escape key to close modals
+  document.addEventListener('keydown', (e) => {
+    if(e.key === 'Escape'){
+      const selectionModalVisible = document.getElementById('selection-modal').classList.contains('visible');
+      const changelogModalVisible = document.getElementById('changelog-modal').classList.contains('visible');
+      const helpModalVisible = document.getElementById('help-modal').classList.contains('visible');
+      const savedListsModalVisible = document.getElementById('saved-lists-modal').classList.contains('visible');
+      const confirmModalVisible = document.getElementById('confirm-modal').classList.contains('visible');
+      const addPinModalVisible = document.getElementById('add-pin-modal').classList.contains('visible');
+      const editPinModalVisible = document.getElementById('edit-pin-modal').classList.contains('visible');
+
+      if(confirmModalVisible){
+        document.getElementById('confirm-modal-overlay').classList.remove('visible');
+        document.getElementById('confirm-modal').classList.remove('visible');
+        window.addressToRemove = null;
+        window.removeMultiplePins = false;
+        window.selectedPins = null;
+        window.resetAllRequested = false;
+        window.pendingOverwriteListId = null;
+        window.pendingDeleteListId = null;
+        document.getElementById('btn-confirm-yes').textContent = 'Yes, Remove';
+      } else if(addPinModalVisible){
+        closeAddPinModal();
+      } else if(editPinModalVisible){
+        closeEditPinModal();
+      } else if(selectionModalVisible){
+        document.getElementById('selection-modal-overlay').classList.remove('visible');
+        document.getElementById('selection-modal').classList.remove('visible');
+      } else if(helpModalVisible){
+        closeHelpModal();
+      } else if(savedListsModalVisible){
+        closeSavedListsModal();
+      } else if(changelogModalVisible){
+        document.getElementById('changelog-modal').classList.remove('visible');
+      }
+    }
+  });
+
+  // ---------- Back button support (Android + browser back) ----------
+  function ensureMainHistoryState(){
+    const state = window.history.state;
+    if(!state || state.app !== 'main'){
+      window.history.pushState({app: 'main'}, '', window.location.href);
+    }
+  }
+
+  function closeAllModals(){
+    document.getElementById('changelog-modal').classList.remove('visible');
+    document.getElementById('help-modal').classList.remove('visible');
+    document.getElementById('help-modal-overlay').classList.remove('visible');
+    document.getElementById('settings-modal').classList.remove('visible');
+    document.getElementById('settings-modal-overlay').classList.remove('visible');
+    document.getElementById('saved-lists-modal').classList.remove('visible');
+    document.getElementById('saved-lists-modal-overlay').classList.remove('visible');
+    document.getElementById('selection-modal').classList.remove('visible');
+    document.getElementById('selection-modal-overlay').classList.remove('visible');
+    document.getElementById('confirm-modal').classList.remove('visible');
+    document.getElementById('confirm-modal-overlay').classList.remove('visible');
+    document.getElementById('add-pin-modal').classList.remove('visible');
+    document.getElementById('add-pin-modal-overlay').classList.remove('visible');
+    document.getElementById('edit-pin-modal').classList.remove('visible');
+    document.getElementById('edit-pin-modal-overlay').classList.remove('visible');
+    window.addressToRemove = null;
+    window.resetAllRequested = false;
+    window.addressToEdit = null;
+    window.pendingOverwriteListId = null;
+    window.pendingDeleteListId = null;
+    pendingPinLatLng = null;
+  }
+
+  window.addEventListener('popstate', (e) => {
+    // Android and embedded WebViews treat the hardware back button as a
+    // browser history event. Close any open modal here instead of exiting the app.
+    closeAllModals();
+    ensureMainHistoryState();
+  });
+
+  // Auto-zoom when first address is added
+  const originalAddAddresses = addAddresses;
+  addAddresses = async function(){
+    const wasEmpty = addresses.filter(a => !a.error && a.lat != null).length === 0;
+    await originalAddAddresses.call(this);
+    if(wasEmpty && addresses.filter(a => !a.error && a.lat != null).length > 0){
+      setTimeout(fitToPins, 500);
+    }
+  };
+
+  // ---------- Wire up ----------
+  loadSettings();
+  ensureMainHistoryState();
+  document.getElementById('btn-add').addEventListener('click', addAddresses);
+  document.getElementById('btn-cancel-add').addEventListener('click', () => { cancelAddRequested = true; });
+  document.getElementById('btn-locate').addEventListener('click', startTracking);
+  document.getElementById('btn-manual-location').addEventListener('click', enableManualLocation);
+  document.getElementById('btn-route').addEventListener('click', buildRoute);
+  document.getElementById('btn-reset').addEventListener('click', requestResetAll);
+  updateRouteButtonLabel();
+  renderRoadRequestMeter();
+  setInterval(renderRoadRequestMeter, 60 * 1000);
+
+  // ---------- Portrait phone/tablet panel-height resizer ----------
+  // The panel-above-map stacked layout (with this drag handle) only applies
+  // in portrait at <=1024px — landscape at that width uses the normal
+  // side-by-side desktop layout instead. This must match the CSS media
+  // query in the <style> block above exactly.
+  (function(){
+    const resizer = document.getElementById('panel-resizer');
+    const panel = document.getElementById('panel');
+    const HEIGHT_KEY = 'garage-sale-panel-height-px';
+    const MIN_HEIGHT = 100;
+    const stackedQuery = window.matchMedia('(max-width:1024px) and (orientation:portrait)');
+
+    function maxHeight(){ return Math.round(window.innerHeight * 0.75); }
+
+    function applyHeight(px){
+      const clamped = Math.max(MIN_HEIGHT, Math.min(maxHeight(), px));
+      panel.style.height = clamped + 'px';
+      panel.style.maxHeight = clamped + 'px';
+      return clamped;
+    }
+
+    // A height dragged in portrait mode is meaningless once the layout
+    // switches to side-by-side (landscape or a wide screen) — the panel
+    // there fills the full height by default, and a leftover inline height
+    // would otherwise leave it stuck short with blank space beside it.
+    function syncToLayout(){
+      if(stackedQuery.matches){
+        const saved = parseFloat(localStorage.getItem(HEIGHT_KEY));
+        if(!isNaN(saved)) applyHeight(saved);
+      } else {
+        panel.style.height = '';
+        panel.style.maxHeight = '';
+      }
+      if(map) setTimeout(() => map.invalidateSize(), 50);
+    }
+
+    syncToLayout();
+    stackedQuery.addEventListener('change', syncToLayout);
+
+    let dragging = false;
+    let startY = 0;
+    let startHeight = 0;
+
+    resizer.addEventListener('pointerdown', (e) => {
+      if(panel.classList.contains('collapsed')) return;
+      dragging = true;
+      startY = e.clientY;
+      startHeight = panel.getBoundingClientRect().height;
+      resizer.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    });
+    resizer.addEventListener('pointermove', (e) => {
+      if(!dragging) return;
+      applyHeight(startHeight + (e.clientY - startY));
+      map.invalidateSize();
+    });
+    function endDrag(){
+      if(!dragging) return;
+      dragging = false;
+      localStorage.setItem(HEIGHT_KEY, panel.getBoundingClientRect().height);
+      setTimeout(() => map.invalidateSize(), 50);
+    }
+    resizer.addEventListener('pointerup', endDrag);
+    resizer.addEventListener('pointercancel', endDrag);
+  })();
+
+  (async function init(){
+    if(location.protocol === 'file:' && !hasClaudeStorage){
+      document.getElementById('file-warning').style.display = 'block';
+    }
+    await loadAddresses();
+    renderPins();
+    updateStats();
+    lastFailedList = addresses.filter(a => a.error).map(a => a.raw);
+    renderFailedList(lastFailedList);
+    if(addresses.some(a => !a.error && a.lat != null)) fitToPins();
+
+    // Restore a manually-set location. GPS has no equivalent need -- tracking
+    // simply gets re-requested and produces a fresh fix -- but a tapped pin
+    // has no other way to come back after a reload.
+    const savedPos = loadManualLocation();
+    if(savedPos && !currentPos){
+      currentPos = savedPos;
+      currentPosSource = 'manual';
+      placeMeMarker(currentPos.lat, currentPos.lon);
+      document.getElementById('geo-status').textContent = 'Using your last manual location — tap "Track my location" for GPS, or tap the map to update.';
+    }
+  })();
+
+  // ---------- Progressive Web App Support ----------
+  // Register service worker for offline support and install prompts
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js', { scope: '/' })
+      .then(reg => {
+        console.log('Service Worker registered successfully:', reg);
+      })
+      .catch(err => {
+        console.log('Service Worker registration failed:', err);
+      });
+  }
+
+  // Handle install prompt (when user can add app to home screen)
+  let deferredPrompt;
+  window.addEventListener('beforeinstallprompt', (e) => {
+    // Prevent the mini-infobar from appearing
+    e.preventDefault();
+    // Store the event for later use
+    deferredPrompt = e;
+    console.log('App installable - can add to home screen');
+  });
+
+  // Listen for app installed event
+  window.addEventListener('appinstalled', () => {
+    console.log('App installed successfully');
+  });
+
+})();
+</script>
+</body>
+</html>
